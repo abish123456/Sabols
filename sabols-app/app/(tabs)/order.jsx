@@ -406,8 +406,8 @@ export default function OrderScreen() {
       }
       return false;
     };
-    BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => BackHandler.removeEventListener('hardwareBackPress', onBackPress);
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
   }, [isPlacingOrder]);
 
   const refreshAddresses = async (knownId) => {
@@ -532,6 +532,8 @@ export default function OrderScreen() {
       }
       return true;
     } catch (err) {
+      console.error('RAZORPAY ERROR FULL:', err);
+      console.log('Error details:', err.message, err.code);
       if (err?.code === 2 || err?.code === 0) return false;
       setIsPaymentSuccess(false);
       let errorMsg = err.message || 'Payment process failed. Please try again.';
@@ -578,8 +580,10 @@ export default function OrderScreen() {
     setIsPlacingOrder(true);
 
     try {
+      console.log('Starting order placement flow...');
       if (createdOrderId && paymentMethod === 'ONLINE') {
         const amountInPaise = Math.round(total * 100);
+        console.log('Retry existing order payment:', { createdOrderId, amountInPaise });
         const paid = await processRazorpay(createdOrderId, amountInPaise);
         if (paid) {
           (async () => {
@@ -660,6 +664,7 @@ export default function OrderScreen() {
         return;
       }
 
+      console.log('Initiating Razorpay for new order ID:', data.order.id, 'Amount:', amountInPaise);
       const paid = await processRazorpay(data.order.id, amountInPaise);
       if (paid) {
         (async () => {
