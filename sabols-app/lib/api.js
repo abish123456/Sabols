@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BASE_URL = 'https://mobile-app-liard-kappa.vercel.app/shop';
+export const BASE_URL = 'https://mobile-app-vert-kappa.vercel.app/shop';
 
 export const getAuthToken = async () => {
   try {
@@ -31,7 +31,7 @@ export const apiFetch = async (endpoint, options = {}) => {
 
   const url = `${BASE_URL}${endpoint}`;
   console.log(`[API] Fetching: ${url}`);
-  
+
   return fetch(url, {
     ...options,
     headers,

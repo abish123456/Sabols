@@ -5,6 +5,7 @@ import { getCustomerIdFromSession } from "../../../lib/session-auth";
 import crypto from "crypto";
 import { validateQuantity, validateDeliverySlot, validateAddressLine, validateArea, validateCity, validatePincode } from "../../../lib/validation";
 import { checkRateLimit, RATE_LIMITS, getRateLimitHeaders } from "../../../lib/rate-limit";
+import { logAction } from "../../../lib/audit";
 import { createSecureResponse } from "../../../lib/security-headers";
 import { createRequestLogger } from "../../../lib/request-logger";
 import { getNowIST, formatDateIST, getStartOfDayIST, getEndOfDayIST, formatDateToISO, addDaysIST, createISTDate } from "../../../lib/timezone";
@@ -322,10 +323,11 @@ export async function POST(req: NextRequest) {
     // Get customer details using session customer ID
     const customerRes = await query<{
       id: string;
+      name: string;
       depositWalletBalance: number;
       cansInHand: number;
     }>(
-      `SELECT "id", "depositWalletBalance", "cansInHand"
+      `SELECT "id", "name", "depositWalletBalance", "cansInHand"
        FROM "Customer"
        WHERE "id" = $1`,
       [customerId],
@@ -1055,7 +1057,28 @@ export async function POST(req: NextRequest) {
       );
     });
 
-    // If COD, run auto-assignment logic
+    // Log the order placement globally first so it acts as the base event
+    logAction({
+      actorId: customer.id,
+      actorType: 'CUSTOMER',
+      actorName: customer.name,
+      entity: 'ORDER',
+      entityId: orderId,
+      action: 'CREATE',
+      newData: {
+        id: orderId,
+        quantity,
+        deliveryDate,
+        deliverySlot: normalizedSlot,
+        status: orderStatus,
+        paymentStatus,
+        paymentMethod,
+        amount: totalAmount,
+      },
+      description: `Customer placed order #${orderNumber} for ${quantity} items`,
+    });
+
+    // If COD, run auto-assignment logic after logging creation
     if (paymentType === 'COD') {
       try {
         await assignOrderToRoute(orderId);
