@@ -1,94 +1,124 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
-import { MapPin } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Modal, ScrollView } from 'react-native';
+import { MapPin, Search, ChevronDown, X } from 'lucide-react-native';
 import MapPicker from './MapPicker';
+import { apiFetch } from '../lib/api';
 
 export default function AddressForm({ formData, onChange, errors, showDefaultToggle }) {
-  const [showMap, setShowMap] = useState(false);
+  const [detectedAddress, setDetectedAddress] = useState('');
+  const [isGeocoding, setIsGeocoding] = useState(false);
+  const [serviceAreas, setServiceAreas] = useState([]);
+  const [showPincodeDropdown, setShowPincodeDropdown] = useState(false);
+  const [searchPincode, setSearchPincode] = useState('');
 
-  const handleLocationSelect = (data) => {
-    if (data.coordinates) {
-      onChange('location', {
-        type: 'Point',
-        coordinates: [data.coordinates.longitude, data.coordinates.latitude]
-      });
-    }
-    
-    if (data.addressInfo) {
-      if (data.addressInfo.name) onChange('addressLine1', data.addressInfo.name);
-      if (data.addressInfo.street) onChange('addressLine2', data.addressInfo.street);
-      if (data.addressInfo.city) onChange('city', data.addressInfo.city);
-      if (data.addressInfo.postalCode) onChange('pincode', data.addressInfo.postalCode);
-      if (data.addressInfo.district || data.addressInfo.subregion) {
-        onChange('area', data.addressInfo.district || data.addressInfo.subregion);
+  useEffect(() => {
+    const fetchServiceAreas = async () => {
+      try {
+        const response = await apiFetch('/api/service-areas');
+        const data = await response.json();
+        if (data.success && data.serviceAreas) {
+          setServiceAreas(data.serviceAreas);
+        }
+      } catch (err) {
+        console.error('Error fetching service areas:', err);
       }
+    };
+    fetchServiceAreas();
+  }, []);
+
+  const handlePincodeSelect = (area) => {
+    onChange('pincode', area.pincode);
+    onChange('area', area.areaName);
+    if (!formData.city) {
+      onChange('city', 'Coimbatore');
+    }
+    setShowPincodeDropdown(false);
+    setSearchPincode('');
+  };
+
+  const filteredAreas = serviceAreas.filter(a => a.pincode.includes(searchPincode) || a.areaName.toLowerCase().includes(searchPincode.toLowerCase()));
+
+  const fetchCoordinateAddress = async (lat, lng) => {
+    setIsGeocoding(true);
+    try {
+      const response = await apiFetch(`/api/geocode?lat=${lat}&lon=${lng}`);
+      const data = await response.json();
+      
+      if (data && data.display_name) {
+        setDetectedAddress(data.display_name);
+        
+        // Auto-fill pincode if available
+        if (data.address && data.address.postcode && !formData.pincode) {
+          onChange('pincode', data.address.postcode);
+        }
+      } else {
+        setDetectedAddress('');
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+    } finally {
+      setIsGeocoding(false);
     }
   };
 
+  const handleLocationSelect = React.useCallback((data) => {
+    if (data.coordinates) {
+      const lat = data.coordinates.latitude || data.coordinates[1];
+      const lng = data.coordinates.longitude || data.coordinates[0];
+      
+      onChange('location', {
+        type: 'Point',
+        coordinates: [lng, lat]
+      });
+      
+      fetchCoordinateAddress(lat, lng);
+    }
+  }, [onChange]);
+
+  const initialMapLocation = React.useMemo(() => {
+    return formData.location?.coordinates 
+      ? { 
+          latitude: formData.location.coordinates[1] || formData.location.coordinates.latitude, 
+          longitude: formData.location.coordinates[0] || formData.location.coordinates.longitude
+        } 
+      : null;
+  }, [formData.location?.coordinates]);
+
   return (
     <View className="space-y-4 w-full">
-      {/* Map Picker Button */}
-      <TouchableOpacity 
-        className="w-full bg-blue-50 border border-[#0ea5e9] p-4 rounded-xl flex-row items-center justify-center mb-2"
-        onPress={() => setShowMap(true)}
-      >
-        <MapPin size={20} color="#0ea5e9" className="mr-2" />
-        <Text className="text-[#0ea5e9] font-bold text-base">
-          {formData.location?.coordinates ? 'Update Location on Map' : 'Select Location on Map'}
-        </Text>
-      </TouchableOpacity>
-
-      {formData.location?.coordinates && (
-        <Text className="text-xs text-green-600 font-medium text-center mb-2">
-          ✓ Location coordinates saved
-        </Text>
-      )}
-
-      <MapPicker 
-        visible={showMap}
-        onClose={() => setShowMap(false)}
-        onLocationSelect={handleLocationSelect}
-        initialLocation={
-          formData.location?.coordinates 
-            ? { 
-                latitude: formData.location.coordinates[1], 
-                longitude: formData.location.coordinates[0] 
-              } 
-            : null
-        }
-      />
-
       <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Nickname (e.g. Home, Work)</Text>
+        <Text className="text-sm font-semibold text-gray-700 mb-1">Address Nickname (Optional)</Text>
         <TextInput
           className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.nickname ? 'border-red-500' : 'border-gray-200'}`}
-          placeholder="Home"
+          placeholder="Home / Office / Other"
           value={formData.nickname}
           onChangeText={(text) => onChange('nickname', text)}
         />
       </View>
 
-      <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Contact Name *</Text>
-        <TextInput
-          className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.contactName ? 'border-red-500' : 'border-gray-200'}`}
-          placeholder="John Doe"
-          value={formData.contactName}
-          onChangeText={(text) => onChange('contactName', text)}
-        />
-      </View>
+      <View className="flex-row gap-4">
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-gray-700 mb-1">Contact Person (Optional)</Text>
+          <TextInput
+            className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.contactName ? 'border-red-500' : 'border-gray-200'}`}
+            placeholder="Recipient Name"
+            value={formData.contactName}
+            onChangeText={(text) => onChange('contactName', text)}
+          />
+        </View>
 
-      <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Contact Phone *</Text>
-        <TextInput
-          className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.contactPhone ? 'border-red-500' : 'border-gray-200'}`}
-          placeholder="10-digit number"
-          keyboardType="phone-pad"
-          maxLength={10}
-          value={formData.contactPhone}
-          onChangeText={(text) => onChange('contactPhone', text)}
-        />
-        {errors?.contactPhone && <Text className="text-xs text-red-500 mt-1">{errors.contactPhone}</Text>}
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-gray-700 mb-1">Contact Phone *</Text>
+          <TextInput
+            className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.contactPhone ? 'border-red-500' : 'border-gray-200'}`}
+            placeholder="10-digit Number"
+            keyboardType="phone-pad"
+            maxLength={10}
+            value={formData.contactPhone}
+            onChangeText={(text) => onChange('contactPhone', text)}
+          />
+          {errors?.contactPhone && <Text className="text-xs text-red-500 mt-1">{errors.contactPhone}</Text>}
+        </View>
       </View>
 
       <View>
@@ -103,10 +133,10 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
       </View>
 
       <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Address Line 2</Text>
+        <Text className="text-sm font-semibold text-gray-700 mb-1">Address Line 2 (Optional)</Text>
         <TextInput
           className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-black"
-          placeholder="Street Name, Locality"
+          placeholder="Street, Road name"
           value={formData.addressLine2}
           onChangeText={(text) => onChange('addressLine2', text)}
         />
@@ -117,7 +147,7 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
           <Text className="text-sm font-semibold text-gray-700 mb-1">City *</Text>
           <TextInput
             className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.city ? 'border-red-500' : 'border-gray-200'}`}
-            placeholder="Coimbatore"
+            placeholder="City"
             value={formData.city}
             onChangeText={(text) => onChange('city', text)}
           />
@@ -125,37 +155,143 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
         </View>
 
         <View className="flex-1">
-          <Text className="text-sm font-semibold text-gray-700 mb-1">Pincode *</Text>
+          <Text className="text-sm font-semibold text-gray-700 mb-1">Landmark (Optional)</Text>
           <TextInput
-            className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.pincode ? 'border-red-500' : 'border-gray-200'}`}
-            placeholder="641001"
-            keyboardType="numeric"
-            maxLength={6}
-            value={formData.pincode}
-            onChangeText={(text) => onChange('pincode', text)}
+            className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-black"
+            placeholder="Nearby landmark"
+            value={formData.landmark}
+            onChangeText={(text) => onChange('landmark', text)}
           />
-          {errors?.pincode && <Text className="text-xs text-red-500 mt-1">{errors.pincode}</Text>}
         </View>
       </View>
 
-      <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Area / Neighborhood *</Text>
-        <TextInput
-          className={`bg-white border rounded-lg px-4 py-3 text-black ${errors?.area ? 'border-red-500' : 'border-gray-200'}`}
-          placeholder="Peelamedu"
-          value={formData.area}
-          onChangeText={(text) => onChange('area', text)}
-        />
-        {errors?.area && <Text className="text-xs text-red-500 mt-1">{errors.area}</Text>}
+      <View className="flex-row gap-4 relative z-10">
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-gray-700 mb-1">Pincode *</Text>
+          <TouchableOpacity
+            className={`bg-white border flex-row items-center justify-between px-3 py-3 rounded-lg ${showPincodeDropdown ? 'border-[#0ea5e9]' : 'border-gray-200'} ${errors?.pincode ? 'border-red-500' : ''}`}
+            onPress={() => setShowPincodeDropdown(!showPincodeDropdown)}
+          >
+            <Text 
+              className={formData.pincode ? "text-black font-medium flex-1 mr-2" : "text-gray-400 font-medium flex-1 mr-2"}
+              numberOfLines={1} 
+            >
+              {formData.pincode ? `${formData.pincode}${formData.area ? ` - ${formData.area}` : ''}` : "Select Pincode"}
+            </Text>
+            {showPincodeDropdown ? (
+              <X size={20} color="#9ca3af" />
+            ) : (
+              <ChevronDown size={20} color="#9ca3af" />
+            )}
+          </TouchableOpacity>
+          {errors?.pincode && !showPincodeDropdown && <Text className="text-xs text-red-500 mt-1">{errors.pincode}</Text>}
+        </View>
+
+        <View className="flex-1">
+          <Text className="text-sm font-semibold text-gray-700 mb-1">Area / Zone *</Text>
+          <TextInput
+            className={`border rounded-lg px-4 py-3 ${formData.pincode ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white text-black border-gray-200'} ${errors?.area ? 'border-red-500' : ''}`}
+            placeholder="Area or Zone"
+            value={formData.area}
+            onChangeText={(text) => onChange('area', text)}
+            editable={!formData.pincode}
+            selectTextOnFocus={!formData.pincode}
+          />{errors?.area && <Text className="text-xs text-red-500 mt-1">{errors.area}</Text>}
+        </View>
       </View>
 
-      <View>
-        <Text className="text-sm font-semibold text-gray-700 mb-1">Landmark (Optional)</Text>
-        <TextInput
-          className="bg-white border border-gray-200 rounded-lg px-4 py-3 text-black"
-          placeholder="Near central park"
-          value={formData.landmark}
-          onChangeText={(text) => onChange('landmark', text)}
+      {/* Full-Screen Search Modal for Mobile Keyboard Safety */}
+      <Modal visible={showPincodeDropdown} transparent animationType="slide" onRequestClose={() => setShowPincodeDropdown(false)}>
+        <View className="flex-1 bg-black/50 justify-end">
+          <View className="bg-white rounded-t-3xl flex-1 mt-20 overflow-hidden shadow-2xl">
+            {/* Header */}
+            <View className="flex-row justify-between items-center p-5 border-b border-gray-100 bg-white">
+              <Text className="text-xl font-black text-black">Select Pincode</Text>
+              <TouchableOpacity onPress={() => setShowPincodeDropdown(false)} className="p-2 bg-gray-100 rounded-full">
+                <X size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View className="p-4 border-b border-gray-100 bg-white">
+              <View className="flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
+                <Search size={20} color="#9ca3af" className="mr-2" />
+                <TextInput
+                  className="flex-1 text-black font-medium text-base"
+                  placeholder="Search by pincode or area..."
+                  value={searchPincode}
+                  onChangeText={setSearchPincode}
+                  autoFocus={true}
+                />
+              </View>
+            </View>
+
+            {/* List */}
+            <ScrollView className="flex-1 bg-gray-50" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {serviceAreas.length === 0 ? (
+                <View className="py-12 items-center justify-center">
+                  <ActivityIndicator size="large" color="#0ea5e9" />
+                  <Text className="text-gray-500 mt-4 font-medium">Loading service areas...</Text>
+                </View>
+              ) : filteredAreas.length === 0 ? (
+                <View className="py-12 items-center justify-center px-6">
+                  <View className="w-16 h-16 bg-gray-200 rounded-full items-center justify-center mb-4">
+                    <Search size={24} color="#9ca3af" />
+                  </View>
+                  <Text className="text-lg font-bold text-gray-700 text-center mb-1">No areas found</Text>
+                  <Text className="text-gray-500 text-center text-sm">We couldn't find any service area matching "{searchPincode}".</Text>
+                </View>
+              ) : (
+                filteredAreas.map((area) => (
+                  <TouchableOpacity
+                    key={area.pincode}
+                    className="flex-row items-center p-5 border-b border-gray-200 bg-white active:bg-blue-50"
+                    onPress={() => handlePincodeSelect(area)}
+                  >
+                    <View className="w-12 h-12 bg-blue-50 rounded-full items-center justify-center mr-4">
+                      <MapPin size={20} color="#0ea5e9" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-black text-lg text-black mb-0.5">{area.pincode}</Text>
+                      <Text className="text-sm text-gray-500 font-medium">{area.areaName}</Text>
+                    </View>
+                    <ChevronDown size={20} color="#d1d5db" style={{ transform: [{ rotate: '-90deg' }] }} />
+                  </TouchableOpacity>
+                ))
+              )}
+              <View className="h-12" />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <View className="pt-4 border-t border-gray-100">
+        <Text className="text-sm font-semibold text-gray-700 mb-2">Pin Exact Location *</Text>
+        
+        {isGeocoding ? (
+          <View className="flex-row items-center mb-2">
+            <ActivityIndicator size="small" color="#0ea5e9" className="mr-2" />
+            <Text className="text-xs text-gray-500">Detecting address...</Text>
+          </View>
+        ) : null}
+
+        {!isGeocoding && (detectedAddress || (formData.addressLine1 && formData.city)) ? (
+          <View className="p-3 rounded-xl bg-blue-50 border border-blue-100 flex-row items-start mb-3">
+            <View className="h-8 w-8 rounded-full bg-blue-100 items-center justify-center mr-3 mt-0.5">
+              <MapPin size={16} color="#0ea5e9" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[10px] uppercase font-black text-[#0ea5e9] tracking-widest">Detected Address</Text>
+              <Text className="text-sm font-semibold text-gray-700 leading-snug">
+                {detectedAddress || `${formData.addressLine1}${formData.addressLine2 ? ', ' + formData.addressLine2 : ''}, ${formData.area ? formData.area + ', ' : ''}${formData.city}${formData.pincode ? ' - ' + formData.pincode : ''}`}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        <MapPicker 
+          onLocationSelect={handleLocationSelect}
+          initialLocation={initialMapLocation}
         />
       </View>
 
@@ -170,6 +306,9 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
           <Text className="text-gray-700 font-medium">Set as default address</Text>
         </TouchableOpacity>
       )}
+
+      {/* Removed Pincode Modal */}
+
     </View>
   );
 }

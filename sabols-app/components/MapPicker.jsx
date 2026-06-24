@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import { Crosshair } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 
-export default function MapPicker({ onLocationSelect, initialLocation }) {
+export default React.memo(function MapPicker({ onLocationSelect, initialLocation }) {
   const [isLoading, setIsLoading] = useState(false);
   const webViewRef = useRef(null);
 
@@ -215,12 +215,14 @@ export default function MapPicker({ onLocationSelect, initialLocation }) {
     }
   };
 
+  const webViewSource = useMemo(() => ({ html }), [html]);
+
   return (
     <View style={{ height: 340, borderRadius: 12, overflow: 'hidden', borderWidth: 1.5, borderColor: '#d1d5db', marginVertical: 8, position: 'relative' }}>
       <WebView
         ref={webViewRef}
         originWhitelist={['*']}
-        source={{ html }}
+        source={webViewSource}
         style={{ flex: 1 }}
         onMessage={handleMessage}
         javaScriptEnabled
@@ -253,4 +255,4 @@ export default function MapPicker({ onLocationSelect, initialLocation }) {
       </TouchableOpacity>
     </View>
   );
-}
+});

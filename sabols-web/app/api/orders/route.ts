@@ -9,6 +9,7 @@ import { createSecureResponse } from "../../../lib/security-headers";
 import { createRequestLogger } from "../../../lib/request-logger";
 import { getNowIST, formatDateIST, getStartOfDayIST, getEndOfDayIST, formatDateToISO, addDaysIST, createISTDate } from "../../../lib/timezone";
 import { getNextWorkingDay } from "../../../lib/holidays";
+import { sendPushNotification } from "../../../lib/push";
 
 // Helper function to format timestamps for display while preserving original for sorting
 function formatTimestampsForDisplay(order: any) {
@@ -1062,6 +1063,21 @@ export async function POST(req: NextRequest) {
       } catch (err) {
         console.error("Failed to auto-assign COD order:", err);
       }
+    }
+
+    // Send Push Notification (Only for COD or 0 amount; ONLINE payments send it after verify)
+    try {
+      if (paymentMethod === 'COD' || totalAmount === 0) {
+        const formattedDate = deliveryDate.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' });
+        await sendPushNotification(
+          customer.id,
+          'Order Placed Successfully! 🎉',
+          `Your order of ${quantity} water can(s) will be delivered on ${formattedDate}.`,
+          { orderId }
+        );
+      }
+    } catch (err) {
+      console.error("Failed to send order push notification:", err);
     }
 
     const response = createSecureResponse(

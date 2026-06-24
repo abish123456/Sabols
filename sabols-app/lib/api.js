@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BASE_URL = 'https://mobile-app-liard-kappa.vercel.app/shop';
+export const BASE_URL = 'https://mobile-app-vert-kappa.vercel.app/shop';
 
 export const getAuthToken = async () => {
   try {

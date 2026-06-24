@@ -3,8 +3,9 @@ import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Modal, TextInput, Switch, BackHandler
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, Tabs } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   CreditCard, CheckCircle2, MapPin, AlertCircle, Plus,
@@ -164,7 +165,7 @@ function AddressFormModal({ visible, onClose, onSaved, initialData, serviceAreas
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} pointerEvents={isSaving ? "none" : "auto"}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor: '#e5e7eb' }}>
           <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#000' }}>
             {isNew ? 'Add New Address' : 'Edit Address'}
@@ -174,7 +175,7 @@ function AddressFormModal({ visible, onClose, onSaved, initialData, serviceAreas
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={{ flex: 1, padding: 16 }}>
+        <ScrollView style={{ flex: 1, padding: 16 }} showsVerticalScrollIndicator={false}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 4 }}>
             Pin Location on Map (Optional)
           </Text>
@@ -235,7 +236,7 @@ function AddressFormModal({ visible, onClose, onSaved, initialData, serviceAreas
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}>
               <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, maxHeight: '80%' }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Pincode</Text>
-                <ScrollView>
+                <ScrollView showsVerticalScrollIndicator={false}>
                   {serviceAreas.map((sa) => (
                     <TouchableOpacity
                       key={sa.id || sa.pincode}
@@ -283,7 +284,13 @@ function AddressFormModal({ visible, onClose, onSaved, initialData, serviceAreas
             )}
           </TouchableOpacity>
         </View>
-      </View>
+
+        {isSaving && (
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.6)', zIndex: 50, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator size="large" color="#0ea5e9" />
+          </View>
+        )}
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -319,6 +326,10 @@ export default function OrderScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // Reset payment state when returning to the checkout screen
+      setIsPaymentSuccess(false);
+      setCreatedOrderId(null);
+
       const loadData = async () => {
         if (cart.length === 0) setIsLoading(true);
         try {
@@ -532,8 +543,6 @@ export default function OrderScreen() {
       }
       return true;
     } catch (err) {
-      console.error('RAZORPAY ERROR FULL:', err);
-      console.log('Error details:', err.message, err.code);
       if (err?.code === 2 || err?.code === 0) return false;
       setIsPaymentSuccess(false);
       let errorMsg = err.message || 'Payment process failed. Please try again.';
@@ -580,10 +589,8 @@ export default function OrderScreen() {
     setIsPlacingOrder(true);
 
     try {
-      console.log('Starting order placement flow...');
       if (createdOrderId && paymentMethod === 'ONLINE') {
         const amountInPaise = Math.round(total * 100);
-        console.log('Retry existing order payment:', { createdOrderId, amountInPaise });
         const paid = await processRazorpay(createdOrderId, amountInPaise);
         if (paid) {
           (async () => {
@@ -664,7 +671,6 @@ export default function OrderScreen() {
         return;
       }
 
-      console.log('Initiating Razorpay for new order ID:', data.order.id, 'Amount:', amountInPaise);
       const paid = await processRazorpay(data.order.id, amountInPaise);
       if (paid) {
         (async () => {
@@ -716,7 +722,14 @@ export default function OrderScreen() {
   const selectedAddress = addresses.find(a => a.id === selectedAddressId);
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f3f7fb' }} contentContainerStyle={{ padding: 16 }}>
+    <View style={{ flex: 1, backgroundColor: '#f3f7fb' }} pointerEvents={isPlacingOrder ? "none" : "auto"}>
+      <Tabs.Screen options={{ 
+        tabBarStyle: { 
+          pointerEvents: isPlacingOrder ? 'none' : 'auto',
+          opacity: isPlacingOrder ? 0.5 : 1
+        } 
+      }} />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
 
       {/* STALE_CART / INSUFFICIENT_CANS Dialog */}
       <Modal visible={showErrorDialog} transparent animationType="fade">
@@ -981,7 +994,7 @@ export default function OrderScreen() {
                             <X size={24} color="#6b7280" />
                           </TouchableOpacity>
                         </View>
-                        <ScrollView keyboardShouldPersistTaps="handled">
+                        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                           <View style={{ gap: 8 }}>
                             {paymentMethods[onlinePaymentMethodType].map((method) => {
                               const hasToken = method.razorpayTokenId && onlinePaymentMethodType === 'card';
@@ -1061,12 +1074,12 @@ export default function OrderScreen() {
       </View>
 
       {/* ── PLACE ORDER BUTTON ───────────────────────────────────────────────── */}
-      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 40 }}>
+      <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
         <TouchableOpacity
           onPress={() => router.push('/(tabs)/cart')}
           disabled={isPlacingOrder || isLoading}
           style={{
-            flex: 1, paddingVertical: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+            flex: 1, paddingVertical: 12, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
             borderWidth: 1, borderColor: '#d1d5db', backgroundColor: '#fff',
             opacity: isPlacingOrder || isLoading ? 0.5 : 1
           }}
@@ -1079,7 +1092,7 @@ export default function OrderScreen() {
           disabled={isPlacingOrder || isLoading}
           style={{
             flex: 2, backgroundColor: isPlacingOrder ? '#7dd3fc' : '#0ea5e9',
-            paddingVertical: 16, borderRadius: 12, alignItems: 'center',
+            paddingVertical: 12, borderRadius: 6, alignItems: 'center',
             flexDirection: 'row', justifyContent: 'center',
           }}
         >
@@ -1095,6 +1108,14 @@ export default function OrderScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      {isPlacingOrder && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.6)', zIndex: 50, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#0ea5e9" />
+          <Text style={{ marginTop: 12, fontWeight: 'bold', color: '#0ea5e9' }}>Placing Order...</Text>
+        </View>
+      )}
+    </View>
   );
 }

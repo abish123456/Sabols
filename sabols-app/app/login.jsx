@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image, Linking } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image, Linking, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Phone, Send, CheckCircle2, ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { apiFetch } from '../lib/api';
+import PaymentPolicy from '../components/PaymentPolicy';
+import { registerForPushNotificationsAsync } from '../hooks/usePushNotifications';
+
 
 const COUNTRY_CODE = '+91';
 const MAX_LENGTH = 10;
@@ -17,6 +20,17 @@ export default function LoginPage() {
   const [phoneSent, setPhoneSent] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [reqId, setReqId] = useState('');
+  const [globalCooldown, setGlobalCooldown] = useState(0);
+
+  useEffect(() => {
+    let timer;
+    if (globalCooldown > 0) {
+      timer = setInterval(() => {
+        setGlobalCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [globalCooldown]);
 
   const handlePhoneSubmit = async (phone) => {
     setIsSendingOTP(true);
@@ -35,7 +49,12 @@ export default function LoginPage() {
         setReqId(data.reqId);
         setPhoneSent(true);
       } else {
-        setError(data.message || 'Failed to send OTP. Please try again.');
+        if (data.retryAfter) {
+          setGlobalCooldown(data.retryAfter);
+          setError('');
+        } else {
+          setError(data.message || 'Failed to send OTP. Please try again.');
+        }
       }
     } catch (err) {
       console.error('Error sending OTP:', err);
@@ -45,20 +64,72 @@ export default function LoginPage() {
     }
   };
 
-  const handleOTPSubmit = async (otp) => {
+  const handleOTPSubmit = async (otp, force = false, preAuthToken = null) => {
     setIsVerifyingOTP(true);
     setError('');
 
     try {
+      // If no local token exists (fresh install / uninstall-reinstall), silently force
+      // overwrite the old server session without showing the "other device" dialog.
+      const existingToken = await AsyncStorage.getItem('authToken');
+      const shouldForce = force || !existingToken;
+
       const response = await apiFetch('/api/auth/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone: phoneNumber, otp, reqId }),
+        body: JSON.stringify({ phone: phoneNumber, otp, reqId, force: shouldForce, ...(preAuthToken ? { preAuthToken } : {}) }),
       });
 
       const data = await response.json();
 
+      if (response.status === 409 && data.errorType === 'EXISTING_SESSION') {
+        // Another device is logged in AND we have a local token (genuine multi-device case)
+        const receivedPreAuthToken = data.preAuthToken;
+        setIsVerifyingOTP(false);
+        Alert.alert(
+          'Already Logged In',
+          'You are already logged in on another device. Do you want to log in here and log out from there?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Yes, Log In Here',
+              style: 'destructive',
+              onPress: () => handleOTPSubmit(otp, true, receivedPreAuthToken),
+            },
+          ]
+        );
+        return;
+      }
+
       if (response.ok) {
         await AsyncStorage.setItem('isLoggedIn', 'true');
+        if (data.token) {
+          await AsyncStorage.setItem('authToken', data.token);
+          
+          // Send push token to backend immediately after successful login
+          try {
+             const token = await registerForPushNotificationsAsync();
+             if (token) {
+               const pushRes = await apiFetch('/api/user/push-token', {
+                 method: 'POST',
+                 headers: { 'Authorization': `Bearer ${data.token}` },
+                 body: JSON.stringify({ pushToken: token }),
+               });
+               
+               if (pushRes.ok) {
+                 await AsyncStorage.setItem('pushTokenSent', 'true');
+                 // Alert.alert('Success', 'Push token successfully registered with server!');
+               } else {
+                 const text = await pushRes.text();
+                 Alert.alert('Push Registration Failed', `Server responded with ${pushRes.status}: ${text}`);
+               }
+             } else {
+               Alert.alert('Push Registration Failed', 'Could not generate a token from Expo. Please check your internet connection or Google Play Services.');
+             }
+          } catch (e) {
+             Alert.alert('Push Registration Error', e.message || 'Unknown error occurred while generating or sending push token.');
+             console.log("Could not register push token after login", e);
+          }
+        }
 
         const previousPhone = await AsyncStorage.getItem('userPhone');
         const lastUserPhone = await AsyncStorage.getItem('lastUserPhone');
@@ -75,7 +146,7 @@ export default function LoginPage() {
 
         if (data.isNewUser) {
           await AsyncStorage.setItem('isNewUserFlow', 'true');
-          router.replace('/profile');
+          router.replace({ pathname: '/(tabs)/profile', params: { isNewUser: 'true' } });
         } else {
           await AsyncStorage.removeItem('isNewUserFlow');
           router.replace('/(tabs)/items');
@@ -125,7 +196,7 @@ export default function LoginPage() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1 bg-[#f3f7fb]"
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View className="bg-white rounded-2xl shadow-sm p-6 w-full max-w-md self-center border border-sky-100">
           <View className="items-center mb-6">
             <View className="w-24 h-24 rounded-full items-center justify-center mb-3 overflow-hidden bg-white shadow-sm border border-gray-100">
@@ -143,8 +214,11 @@ export default function LoginPage() {
           ) : null}
 
           {!phoneSent ? (
-            <PhoneInput onPhoneSubmit={handlePhoneSubmit} isSending={isSendingOTP} />
-          ) : (
+            <PhoneInput 
+              onPhoneSubmit={handlePhoneSubmit} 
+              isSending={isSendingOTP} 
+              cooldown={globalCooldown} 
+            />) : (
             <OTPInput
               phoneNumber={phoneNumber}
               onOTPSubmit={handleOTPSubmit}
@@ -159,14 +233,15 @@ export default function LoginPage() {
           )}
         </View>
 
-        <Text className="text-center text-xs text-gray-500 mt-6">
-          By continuing, you agree to our Payment Policy
-        </Text>
+        <View className="flex-row items-center justify-center mt-6 flex-wrap">
+          <Text className="text-xs text-gray-500">By continuing, you agree to our </Text>
+          <PaymentPolicy />
+        </View>
         
-        <View className="items-center justify-center mt-8 pb-4">
-          <Text className="text-xs text-gray-400">Powered by</Text>
-          <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com')}>
-            <Text className="text-sm font-bold text-gray-500 mt-1">STEDAXIS</Text>
+        <View className="flex-row items-center justify-center mt-8 pb-4">
+          <Text className="text-xs font-medium text-gray-400 mr-1.5">Powered by</Text>
+          <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com').catch(() => {})}>
+            <Image source={require('../assets/stedaxis_logo.png')} style={{ width: 70, height: 14 }} resizeMode="contain" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -174,7 +249,7 @@ export default function LoginPage() {
   );
 }
 
-function PhoneInput({ onPhoneSubmit, isSending }) {
+function PhoneInput({ onPhoneSubmit, isSending, cooldown = 0 }) {
   const [phone, setPhone] = useState('');
   const [localError, setLocalError] = useState('');
 
@@ -233,15 +308,19 @@ function PhoneInput({ onPhoneSubmit, isSending }) {
 
       <TouchableOpacity
         onPress={handleSubmit}
-        disabled={isSending || phone.length < MAX_LENGTH}
-        className={`w-full py-3 rounded-md flex-row justify-center items-center ${isSending || phone.length < MAX_LENGTH ? 'bg-sky-300' : 'bg-[#0ea5e9]'}`}
+        disabled={isSending || phone.length < MAX_LENGTH || cooldown > 0}
+        className={`w-full py-3 rounded-md flex-row justify-center items-center ${isSending || phone.length < MAX_LENGTH || cooldown > 0 ? 'bg-sky-300' : 'bg-[#0ea5e9]'}`}
       >
         {isSending ? (
           <ActivityIndicator size="small" color="white" className="mr-2" />
+        ) : cooldown > 0 ? (
+          null
         ) : (
           <Send size={16} color="white" className="mr-2" />
         )}
-        <Text className="text-white font-semibold text-base">{isSending ? 'Sending OTP...' : 'Send OTP'}</Text>
+        <Text className="text-white font-semibold text-base">
+          {isSending ? 'Sending OTP...' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Send OTP'}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -281,17 +360,31 @@ function OTPInput({ phoneNumber, onOTPSubmit, onResend, onChangeNumber, isVerify
   };
 
   const handleChange = (text, index) => {
-    if (text.length > 1) {
+    const cleaned = text.replace(/\D/g, '');
+    
+    if (cleaned.length > 1) {
       // Handle paste
-      const digits = text.replace(/\D/g, '').slice(0, 6).split('');
-      if (digits.length === 6) {
-        setOtp(digits);
-        onOTPSubmit(digits.join(''));
-        return;
+      const digits = cleaned.slice(0, 6).split('');
+      const newOtp = [...otp];
+      for (let i = 0; i < digits.length; i++) {
+        if (i < 6) {
+          newOtp[i] = digits[i];
+        }
       }
+      setOtp(newOtp);
+      
+      const lastFilledIndex = Math.min(digits.length - 1, 5);
+      if (inputRefs.current[lastFilledIndex]) {
+        inputRefs.current[lastFilledIndex].focus();
+      }
+      
+      if (newOtp.every(digit => digit !== '') && newOtp.length === 6) {
+        onOTPSubmit(newOtp.join(''));
+      }
+      return;
     }
 
-    const value = text.replace(/[^0-9]/g, '');
+    const value = cleaned;
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -334,7 +427,7 @@ function OTPInput({ phoneNumber, onOTPSubmit, onResend, onChangeNumber, isVerify
             onChangeText={(text) => handleChange(text, index)}
             onKeyPress={(e) => handleKeyPress(e, index)}
             keyboardType="numeric"
-            maxLength={1}
+            maxLength={6}
             editable={!isVerifying}
           />
         ))}

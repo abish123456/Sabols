@@ -2,6 +2,16 @@ import '../global.css';
 import { Stack } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
+import * as Notifications from 'expo-notifications';
+
+// Ensure notifications show up as popups even when the app is actively open on the screen
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
 
 const toastConfig = {
   success: (props) => (
@@ -34,6 +44,7 @@ const toastConfig = {
 };
 
 export default function Layout() {
+
   return (
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>

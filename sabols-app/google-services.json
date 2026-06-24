@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "947354417977",
+    "project_id": "sabols-testing",
+    "storage_bucket": "sabols-testing.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:947354417977:android:3aa6af0fa11532a5cac6e8",
+        "android_client_info": {
+          "package_name": "com.sabols.waterapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBzheMZjuEkMD-XyuYL0e8ZQTzf096WVlw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

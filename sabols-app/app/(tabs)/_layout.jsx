@@ -1,13 +1,22 @@
 import { Tabs } from 'expo-router';
 import { Store, ShoppingCart, Package, User } from 'lucide-react-native';
+import { View, Image, Text } from 'react-native';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: true,
+        headerTitle: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+            <Image 
+              source={require('../../assets/icon.png')} 
+              style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: 'white', marginRight: 8 }} 
+            />
+            <Text style={{ fontSize: 22, fontWeight: 'bold', color: 'black', letterSpacing: -0.5 }}>SABOLS</Text>
+          </View>
+        ),
         headerTitleAlign: 'left',
-        headerTitle: 'SABOLS',
         headerStyle: {
           backgroundColor: '#f3f7fb',
         },

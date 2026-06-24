@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Linking, Image } from 'react-native';
 import Toast from 'react-native-toast-message';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Package, Clock, CheckCircle2, XCircle, Truck, AlertCircle, ChevronDown, ChevronUp, Wallet, MapPin, ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams, useFocusEffect, Tabs } from 'expo-router';
+import { Package, Clock, CheckCircle2, XCircle, Truck, AlertCircle, ChevronDown, ChevronUp, Wallet, MapPin, ChevronLeft, ChevronRight, Calendar, Bell, ShoppingCart } from 'lucide-react-native';
 import RazorpayCheckout from 'react-native-razorpay';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch } from '../../lib/api';
 
 const LIMIT = 10;
@@ -102,6 +104,7 @@ export default function OrdersScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [cartCount, setCartCount] = useState(0);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -143,15 +146,26 @@ export default function OrdersScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchOrders(1);
+  useFocusEffect(
+    useCallback(() => {
+      fetchOrders(1);
 
-    // Handle payment=success param from redirect
-    if (searchParams?.payment === 'success') {
-      setIsPaymentSuccess(true);
-      setTimeout(() => setIsPaymentSuccess(false), 3000);
-    }
-  }, []);
+      AsyncStorage.getItem('cart').then(c => {
+        if (c) {
+          const parsed = JSON.parse(c);
+          setCartCount(Array.isArray(parsed) ? parsed.length : 0);
+        }
+      });
+
+      // Handle payment=success param from redirect — only show once then clear the param
+      if (searchParams?.payment === 'success') {
+        setIsPaymentSuccess(true);
+        setTimeout(() => setIsPaymentSuccess(false), 3000);
+        // Clear the URL params so the banner doesn't reappear on every visit
+        router.replace('/(tabs)/orders');
+      }
+    }, [searchParams?.payment])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -269,11 +283,19 @@ export default function OrdersScreen() {
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-[#f3f7fb]"
-      contentContainerStyle={{ padding: 16 }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-    >
+    <View className="flex-1 bg-[#f3f7fb]" pointerEvents={payingId ? "none" : "auto"}>
+      <Tabs.Screen options={{ 
+        tabBarStyle: { 
+          pointerEvents: payingId ? 'none' : 'auto',
+          opacity: payingId ? 0.5 : 1
+        } 
+      }} />
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        className="flex-1 bg-[#f3f7fb]"
+        contentContainerStyle={{ padding: 16, paddingBottom: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
       {/* Payment Success Banner */}
       {isPaymentSuccess && (
         <View className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4 flex-row items-center">
@@ -494,12 +516,13 @@ export default function OrdersScreen() {
       )}
 
       {/* Powered By STEDAXIS */}
-      <View className="items-center justify-center py-6 mt-4 opacity-70">
-        <Text className="text-[10px] text-gray-400">Powered by</Text>
-        <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com')}>
-          <Text className="text-xs font-bold text-gray-500 mt-0.5 tracking-wider">STEDAXIS</Text>
+      <View className="flex-row items-center justify-center py-6 mt-4 opacity-70">
+        <Text className="text-xs font-medium text-gray-400 mr-1.5">Powered by</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com').catch(() => {})}>
+          <Image source={require('../../assets/stedaxis_logo.png')} style={{ width: 70, height: 14 }} resizeMode="contain" />
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

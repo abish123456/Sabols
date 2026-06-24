@@ -45,7 +45,7 @@ export default function ReturnSelector({ cansInHand = 0, onReturnRequested }) {
   }
 
   return (
-    <View className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4 mt-4">
+    <View className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4 mt-4 overflow-hidden" pointerEvents={isSubmitting ? "none" : "auto"}>
       <View className="flex-row items-center mb-4">
         <RefreshCcw size={20} color="#0ea5e9" className="mr-2" />
         <Text className="text-lg font-bold text-black">Return Empty Cans</Text>
@@ -87,6 +87,12 @@ export default function ReturnSelector({ cansInHand = 0, onReturnRequested }) {
           )}
         </TouchableOpacity>
       </View>
+
+      {isSubmitting && (
+        <View className="absolute inset-0 bg-white/60 z-50 items-center justify-center">
+          <ActivityIndicator size="large" color="#0ea5e9" />
+        </View>
+      )}
     </View>
   );
 }

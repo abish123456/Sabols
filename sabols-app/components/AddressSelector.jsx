@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Plus, CheckCircle2, ChevronRight, X } from 'lucide-react-native';
 import AddressForm from './AddressForm';
 import { apiFetch } from '../lib/api';
@@ -118,7 +119,7 @@ export default function AddressSelector({ addresses, selectedAddressId, onSelect
       )}
 
       <Modal visible={isFormOpen} animationType="slide" presentationStyle="pageSheet">
-        <View className="flex-1 bg-white">
+        <SafeAreaView className="flex-1 bg-white" pointerEvents={isSubmitting ? "none" : "auto"}>
           <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
             <Text className="text-lg font-bold text-black">Add New Address</Text>
             <TouchableOpacity onPress={() => setIsFormOpen(false)} className="w-8 h-8 items-center justify-center rounded-full bg-gray-100">
@@ -126,7 +127,7 @@ export default function AddressSelector({ addresses, selectedAddressId, onSelect
             </TouchableOpacity>
           </View>
           
-          <ScrollView className="flex-1 p-4">
+          <ScrollView className="flex-1 p-4" showsVerticalScrollIndicator={false}>
             <AddressForm 
               formData={formData} 
               onChange={(field, value) => {
@@ -138,17 +139,22 @@ export default function AddressSelector({ addresses, selectedAddressId, onSelect
             />
             <View className="h-20" />
           </ScrollView>
-
+          
           <View className="p-4 border-t border-gray-100 bg-white">
             <TouchableOpacity 
-              onPress={handleSave} 
+              onPress={handleSave}
               disabled={isSubmitting}
               className={`w-full py-4 rounded-xl items-center justify-center ${isSubmitting ? 'bg-sky-300' : 'bg-[#0ea5e9]'}`}
             >
-              <Text className="text-white font-bold text-base">{isSubmitting ? 'Saving...' : 'Save Address'}</Text>
+              {isSubmitting ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save Address</Text>}
             </TouchableOpacity>
           </View>
-        </View>
+          {isSubmitting && (
+            <View className="absolute inset-0 bg-white/60 z-50 items-center justify-center">
+              <ActivityIndicator size="large" color="#0ea5e9" />
+            </View>
+          )}
+        </SafeAreaView>
       </Modal>
     </View>
   );

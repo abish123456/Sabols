@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
 import { MapPin, Plus, Pencil, Trash2, Star, X } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AddressForm from './AddressForm';
@@ -15,7 +15,8 @@ const initialFormState = {
   city: '',
   pincode: '',
   landmark: '',
-  isDefault: false
+  isDefault: false,
+  location: null
 };
 
 export default function AddressesManager({ addresses, onRefresh, setAddresses }) {
@@ -45,14 +46,15 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
       city: addr.city || '',
       pincode: addr.pincode || '',
       landmark: addr.landmark || '',
-      isDefault: addr.isDefault || false
+      isDefault: addr.isDefault || false,
+      location: addr.latitude && addr.longitude ? { type: 'Point', coordinates: [addr.longitude, addr.latitude] } : null
     });
     setErrors({});
     setIsFormOpen(true);
   };
 
   const handleDelete = (id) => {
-    Alert.alert('Delete Address', 'Are you sure you want to remove this location?', [
+    Alert.alert('Delete Address?', 'Are you sure you want to delete this address? This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       { 
         text: 'Delete', 
@@ -109,13 +111,40 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.addressLine1?.trim()) newErrors.addressLine1 = 'Required';
-    if (!formData.area?.trim()) newErrors.area = 'Required';
-    if (!formData.city?.trim()) newErrors.city = 'Required';
-    if (!formData.pincode?.trim()) newErrors.pincode = 'Required';
-    if (!formData.contactPhone || formData.contactPhone.length !== 10) {
-      newErrors.contactPhone = 'Valid 10-digit number required';
+
+    const trimmedAddr = formData.addressLine1 ? formData.addressLine1.trim() : '';
+    if (!trimmedAddr) newErrors.addressLine1 = 'Address Line 1 is required';
+    else if (trimmedAddr.length < 5) newErrors.addressLine1 = 'Must be at least 5 characters';
+    else if (trimmedAddr.length > 200) newErrors.addressLine1 = 'Must not exceed 200 characters';
+
+    const trimmedArea = formData.area ? formData.area.trim() : '';
+    if (!trimmedArea) newErrors.area = 'Area/Zone is required';
+    else if (trimmedArea.length < 2) newErrors.area = 'Must be at least 2 characters';
+    else if (trimmedArea.length > 100) newErrors.area = 'Must not exceed 100 characters';
+
+    const trimmedCity = formData.city ? formData.city.trim() : '';
+    if (!trimmedCity) newErrors.city = 'City is required';
+    else if (trimmedCity.length < 2) newErrors.city = 'Must be at least 2 characters';
+    else if (trimmedCity.length > 100) newErrors.city = 'Must not exceed 100 characters';
+    else if (!/^[a-zA-Z\s\-]+$/.test(trimmedCity)) newErrors.city = 'Letters, spaces, and hyphens only';
+
+    const trimmedPin = formData.pincode ? formData.pincode.trim() : '';
+    if (!trimmedPin) newErrors.pincode = 'Pincode is required';
+    else if (!/^\d{6}$/.test(trimmedPin)) newErrors.pincode = 'Must be exactly 6 digits';
+    else {
+      const pinNum = parseInt(trimmedPin, 10);
+      if (pinNum < 100000 || pinNum > 999999) newErrors.pincode = 'Must be between 100000 and 999999';
     }
+
+    const trimmedPhone = formData.contactPhone ? formData.contactPhone.trim() : '';
+    if (!trimmedPhone) newErrors.contactPhone = 'Contact phone is required';
+    else if (trimmedPhone.startsWith('0')) newErrors.contactPhone = 'Cannot start with 0';
+    else if (!/^\d{10}$/.test(trimmedPhone)) newErrors.contactPhone = 'Valid 10-digit number required';
+
+    if (!formData.location?.coordinates || formData.location.coordinates.length < 2) {
+      newErrors.latitude = 'Please pin your exact location on the map';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -135,7 +164,9 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
         city: formData.city,
         pincode: formData.pincode,
         landmark: formData.landmark,
-        isDefault: formData.isDefault
+        isDefault: formData.isDefault,
+        latitude: formData.location?.coordinates?.[1] || null,
+        longitude: formData.location?.coordinates?.[0] || null
       };
 
       const url = editingAddress ? `/api/user/addresses/${editingAddress.id}` : '/api/user/addresses';
@@ -238,7 +269,7 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
       )}
 
       <Modal visible={isFormOpen} animationType="slide" presentationStyle="pageSheet">
-        <View className="flex-1 bg-white">
+        <SafeAreaView className="flex-1 bg-white" pointerEvents={isSubmitting ? "none" : "auto"}>
           <View className="flex-row justify-between items-center p-4 border-b border-gray-100">
             <Text className="text-lg font-bold text-black">{editingAddress ? 'Edit Address' : 'Add New Address'}</Text>
             <TouchableOpacity onPress={() => setIsFormOpen(false)} className="w-8 h-8 items-center justify-center rounded-full bg-gray-100">
@@ -246,7 +277,7 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
             </TouchableOpacity>
           </View>
           
-          <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
+          <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <AddressForm 
               formData={formData} 
               onChange={(field, value) => {
@@ -272,7 +303,13 @@ export default function AddressesManager({ addresses, onRefresh, setAddresses })
               )}
             </TouchableOpacity>
           </View>
-        </View>
+
+          {isSubmitting && (
+            <View className="absolute inset-0 bg-white/60 z-50 items-center justify-center">
+              <ActivityIndicator size="large" color="#0ea5e9" />
+            </View>
+          )}
+        </SafeAreaView>
       </Modal>
     </View>
   );

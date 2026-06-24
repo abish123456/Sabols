@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image, Linking } from 'react-native';
+import { useRouter, useFocusEffect, Tabs } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ShoppingCart, Trash2, Minus, Plus, AlertCircle, CheckCircle2 } from 'lucide-react-native';
+import { ShoppingCart, Trash2, Minus, Plus, AlertCircle, CheckCircle2, Bell } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiFetch } from '../../lib/api';
 
 export default function CartScreen() {
@@ -266,17 +267,21 @@ export default function CartScreen() {
   const unavailableItems = getUnavailableItems();
 
   return (
-    <ScrollView className="flex-1 bg-[#f3f7fb]" contentContainerStyle={{ padding: 16 }}>
-      <Text className="text-2xl font-bold text-black mb-1">Cart Summary</Text>
-      <Text className="text-gray-500 mb-4">{totalQuantity} Item{totalQuantity !== 1 ? 's' : ''} in this cart</Text>
+    <View className="flex-1 bg-[#f3f7fb]" pointerEvents={isLoading ? "none" : "auto"}>
+      <Tabs.Screen options={{ tabBarStyle: { pointerEvents: isLoading ? 'none' : 'auto', opacity: isLoading ? 0.5 : 1 } }} />
+      <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+        {/* Removed Custom Header per user request */}
+        <Text className="text-2xl font-bold text-black mb-1">Cart Summary</Text>
+        <Text className="text-gray-500 mb-4">{totalQuantity} Item{totalQuantity !== 1 ? 's' : ''} in this cart</Text>
 
       {/* Unavailable items alert */}
       {unavailableItems.length > 0 && (
-        <View className="bg-red-50 p-3 rounded-xl border border-red-200 mb-4 flex-row items-start">
-          <AlertCircle size={20} color="#dc2626" className="mr-2 mt-0.5" />
-          <Text className="text-red-700 flex-1 text-sm font-medium">
-            Some products are no longer available. Please remove them before checkout.
-          </Text>
+        <View className="bg-red-50 p-4 rounded-xl border border-red-200 mb-4 flex-row items-start">
+          <AlertCircle size={20} color="#dc2626" className="mr-3 mt-0.5" />
+          <View className="flex-1">
+            <Text className="text-red-800 font-bold mb-1">Some products are no longer available.</Text>
+            <Text className="text-red-700 text-sm">Please remove them from your cart before proceeding to checkout.</Text>
+          </View>
         </View>
       )}
 
@@ -339,9 +344,11 @@ export default function CartScreen() {
                       </Text>
                     )}
                     {depositInfo.toPay > 0 && item.returnQuantity < item.quantity && (
-                      <Text className="text-xs text-amber-600 font-medium mt-2">
-                        Note: ₹{item.depositAmount.toFixed(2)} per new can for {item.quantity - item.returnQuantity} {item.unit}{item.quantity - item.returnQuantity > 1 ? 's' : ''}
-                      </Text>
+                      <View className="mt-3 pt-3 border-t border-sky-200">
+                        <Text className="text-xs text-amber-600 font-medium">
+                          Note: ₹{item.depositAmount.toFixed(2)} per new can applicable for {item.quantity - item.returnQuantity} {item.unit}{item.quantity - item.returnQuantity > 1 ? 's' : ''}
+                        </Text>
+                      </View>
                     )}
                   </View>
                 )}
@@ -429,7 +436,8 @@ export default function CartScreen() {
         </View>
 
         {unavailableItems.length > 0 && (
-          <View className="bg-red-50 p-3 rounded-lg border border-red-200 mt-3">
+          <View className="bg-red-50 p-3 rounded-xl border border-red-200 mt-3 flex-row items-center justify-center">
+            <AlertCircle size={14} color="#dc2626" className="mr-2" />
             <Text className="text-xs text-red-700 text-center font-medium">Remove unavailable items to proceed</Text>
           </View>
         )}
@@ -448,12 +456,13 @@ export default function CartScreen() {
       </View>
 
       {/* Powered By STEDAXIS */}
-      <View className="items-center justify-center py-6 mt-4 opacity-70">
-        <Text className="text-[10px] text-gray-400">Powered by</Text>
-        <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com')}>
-          <Text className="text-xs font-bold text-gray-500 mt-0.5 tracking-wider">STEDAXIS</Text>
+      <View className="flex-row items-center justify-center py-6 mt-4 opacity-70">
+        <Text className="text-xs font-medium text-gray-400 mr-1.5">Powered by</Text>
+        <TouchableOpacity onPress={() => Linking.openURL('https://www.stedaxis.com').catch(() => {})}>
+          <Image source={require('../../assets/stedaxis_logo.png')} style={{ width: 70, height: 14 }} resizeMode="contain" />
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
