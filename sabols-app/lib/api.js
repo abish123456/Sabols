@@ -31,7 +31,7 @@ export const apiFetch = async (endpoint, options = {}) => {
 
   const url = `${BASE_URL}${endpoint}`;
   console.log(`[API] Fetching: ${url}`);
-  
+
   return fetch(url, {
     ...options,
     headers,
