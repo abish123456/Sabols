@@ -7,8 +7,20 @@ import { logAction } from "../../../../lib/audit";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { routeOrderId, deliveryStatus, notDeliveredReason, codCollected, actualReturns } =
-      body;
+    const { routeOrderId, deliveryStatus, notDeliveredReason, codCollected, actualReturns, token } = body;
+
+    // Optional JWT Auth Check
+    const authHeader = req.headers.get("authorization");
+    let jwtUser = null;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const jwtToken = authHeader.split(" ")[1];
+        const jwt = require("jsonwebtoken");
+        jwtUser = jwt.verify(jwtToken, process.env.JWT_SECRET || "fallback_secret_for_development_only");
+      } catch (err) {
+        // Fallback to route token validation if JWT fails or isn't a JWT
+      }
+    }
 
     // Validation
     if (!routeOrderId || typeof routeOrderId !== "string") {

@@ -47,6 +47,7 @@ export default function AdminsPage() {
         email: '',
         password: '',
         name: '',
+        phone: '',
         roleId: 'super_admin',
         active: true
     });
@@ -158,6 +159,7 @@ export default function AdminsPage() {
                     email: '',
                     password: '',
                     name: '',
+                    phone: '',
                     roleId: 'super_admin',
                     active: true
                 });
@@ -259,6 +261,20 @@ export default function AdminsPage() {
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {roles.find(r => r.id === formData.roleId)?.name?.toLowerCase() === 'delivery staff' && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="phone">Phone Number <span className="text-destructive">*</span></Label>
+                                    <Input 
+                                        id="phone" 
+                                        value={formData.phone || ''}
+                                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                                        placeholder="e.g. +919876543210"
+                                        required={roles.find(r => r.id === formData.roleId)?.name?.toLowerCase() === 'delivery staff'}
+                                    />
+                                    <p className="text-xs text-muted-foreground">Required for Delivery Staff to assign routes.</p>
+                                </div>
+                            )}
                             
                             <div className="space-y-2 flex flex-col justify-center mt-2">
                                 <div className="flex items-center space-x-2">
@@ -297,7 +313,7 @@ export default function AdminsPage() {
                                 {hasPermission('create_admins') && (
                                     <Button 
                                         onClick={() => {
-                                            setFormData({ id: '', username: '', email: '', password: '', name: '', roleId: 'super_admin', active: true });
+                                            setFormData({ id: '', username: '', email: '', password: '', name: '', phone: '', roleId: 'super_admin', active: true });
                                             setShowCreateDialog(true);
                                         }} 
                                         size="icon" 
@@ -374,6 +390,7 @@ export default function AdminsPage() {
                                                                     email: admin.email,
                                                                     password: '',
                                                                     name: admin.name || '',
+                                                                    phone: admin.deliveryBoyPhone || '',
                                                                     roleId: admin.roleId || 'super_admin',
                                                                     active: admin.active !== false
                                                                 });
