@@ -86,6 +86,36 @@ export default function OrderDetailsScreen() {
     }
   };
 
+  const verifyLocation = async (actionName: string): Promise<boolean> => {
+    if (!order?.address?.latitude || !order?.address?.longitude) return true;
+    try {
+      let { status: permissionStatus } = await Location.requestForegroundPermissionsAsync();
+      if (permissionStatus !== 'granted') {
+        Alert.alert('Permission Denied', `Location permission is required to ${actionName}.`);
+        return false;
+      }
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const distance = calculateDistance(
+        location.coords.latitude,
+        location.coords.longitude,
+        order.address.latitude,
+        order.address.longitude
+      );
+      if (distance > 100) {
+        Alert.alert(
+          'Too Far',
+          `You are ${Math.round(distance)} meters away from the delivery location. You must be within 100 meters to ${actionName}.`
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error("Location error:", error);
+      Alert.alert('Location Error', 'Could not get your current location. Please try again.');
+      return false;
+    }
+  };
+
   const handleUpdateStatus = async (status: 'DELIVERED' | 'NOT_DELIVERED', payloadReason?: string) => {
     if (status === 'NOT_DELIVERED') {
       if (!notDeliveredReason && !payloadReason) {
@@ -95,50 +125,21 @@ export default function OrderDetailsScreen() {
     }
 
     if (status === 'DELIVERED') {
-      if (order?.address?.latitude && order?.address?.longitude) {
-        setSubmitting(true);
-        setUpdatingStatus(status);
-        try {
-          let { status: permissionStatus } = await Location.requestForegroundPermissionsAsync();
-          if (permissionStatus !== 'granted') {
-            Alert.alert('Permission Denied', 'Location permission is required to mark order as delivered.');
-            setSubmitting(false);
-            setUpdatingStatus(null);
-            return;
-          }
-
-          let location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-
-          const distance = calculateDistance(
-            location.coords.latitude,
-            location.coords.longitude,
-            order.address.latitude,
-            order.address.longitude
-          );
-
-          if (distance > 100) {
-            Alert.alert(
-              'Too Far',
-              `You are ${Math.round(distance)} meters away from the delivery location. You must be within 100 meters to mark as delivered.`
-            );
-            setSubmitting(false);
-            setUpdatingStatus(null);
-            return;
-          }
-        } catch (error) {
-          console.error("Location error:", error);
-          Alert.alert('Location Error', 'Could not get your current location. Please try again.');
+      setSubmitting(true);
+      setUpdatingStatus(status);
+      
+      if (!showMarkDeliveredModal) {
+        const isNear = await verifyLocation('mark as delivered');
+        if (!isNear) {
           setSubmitting(false);
           setUpdatingStatus(null);
           return;
         }
       }
+    } else {
+      setUpdatingStatus(status);
+      setSubmitting(true);
     }
-
-    setUpdatingStatus(status);
-    setSubmitting(true);
     try {
       const token = await AsyncStorage.getItem('staffToken');
       
@@ -173,10 +174,11 @@ export default function OrderDetailsScreen() {
         }
       } else {
         Alert.alert('Error', data.message || 'Failed to update order');
+        setSubmitting(false);
+        setUpdatingStatus(null);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to update order status');
-    } finally {
       setSubmitting(false);
       setUpdatingStatus(null);
     }
@@ -218,6 +220,11 @@ export default function OrderDetailsScreen() {
   const handleGenerateQR = async () => {
     try {
       setIsGeneratingQR(true);
+      const isNear = await verifyLocation('generate QR code');
+      if (!isNear) {
+        setIsGeneratingQR(false);
+        return;
+      }
       const token = await AsyncStorage.getItem('staffToken');
       const res = await fetch(`${API_URL}/api/route-orders/generate-qr`, {
         method: "POST",
@@ -248,6 +255,11 @@ export default function OrderDetailsScreen() {
   const handleMarkAsPaid = async () => {
     try {
       setSubmitting(true);
+      const isNear = await verifyLocation('collect COD');
+      if (!isNear) {
+        setSubmitting(false);
+        return;
+      }
       const token = await AsyncStorage.getItem('staffToken');
       const res = await fetch(`${API_URL}/api/route-orders/mark-paid`, {
         method: "POST",
@@ -301,14 +313,14 @@ export default function OrderDetailsScreen() {
       {/* Header */}
       <View className="bg-white px-4 py-4 flex-row items-center border-b border-gray-200 shadow-sm z-10">
         <TouchableOpacity onPress={() => router.back()} className="mr-3 p-1">
-          <ArrowLeft size={24} color="#111827" />
+          <ArrowLeft size={28} color="#111827" />
         </TouchableOpacity>
-        <Text className="text-xl font-bold text-gray-900 flex-1">Order Details</Text>
+        <Text className="text-2xl font-bold text-gray-900 flex-1">Order Details</Text>
         <View className={`px-2 py-1 rounded-md ${
           (!order.deliveryStatus || order.deliveryStatus === 'PENDING') ? 'bg-amber-100' : 
           order.deliveryStatus === 'DELIVERED' ? 'bg-green-100' : 'bg-red-100'
         }`}>
-          <Text className={`text-xs font-bold ${
+          <Text className={`text-sm font-bold ${
             (!order.deliveryStatus || order.deliveryStatus === 'PENDING') ? 'text-amber-800' : 
             order.deliveryStatus === 'DELIVERED' ? 'text-green-800' : 'text-red-800'
           }`}>
@@ -324,21 +336,21 @@ export default function OrderDetailsScreen() {
         <View className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-4">
           <View className="flex-row items-start justify-between mb-2">
             <View className="flex-1">
-              <Text className="text-lg font-bold text-gray-900">{customer?.name}</Text>
+              <Text className="text-xl font-bold text-gray-900">{customer?.name}</Text>
               {order.address?.nickname ? (
-                <Text className="text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded self-start mt-1 border border-blue-100">
+                <Text className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded self-start mt-1.5 border border-blue-100">
                   {order.address.nickname}
                 </Text>
               ) : null}
             </View>
             <View className="flex-col items-end">
-              <View className="bg-blue-50 px-2 py-1 rounded border border-blue-100 ml-2">
-                <Text className="text-xs font-bold text-blue-700">#{order.orderNumber || order.id.slice(-8).toUpperCase()}</Text>
+              <View className="bg-blue-50 px-2.5 py-1.5 rounded border border-blue-100 ml-2">
+                <Text className="text-sm font-bold text-blue-700">#{order.orderNumber || order.id.slice(-8).toUpperCase()}</Text>
               </View>
               {order.isReassigned && (
-                <View className="flex-row items-center ml-2 mt-1.5">
-                  <Reply size={12} color="#F59E0B" />
-                  <Text className="text-[10px] font-bold text-amber-600 uppercase ml-1">
+                <View className="flex-row items-center ml-2 mt-2">
+                  <Reply size={14} color="#F59E0B" />
+                  <Text className="text-xs font-bold text-amber-600 uppercase ml-1">
                     Re-assigned {order.reassignedCount > 0 && `(${order.reassignedCount})`}
                   </Text>
                 </View>
@@ -347,17 +359,17 @@ export default function OrderDetailsScreen() {
           </View>
           
           <View className="flex-row items-start mt-2">
-            <MapPin size={16} color="#6B7280" style={{ marginTop: 4, flexShrink: 0 }} />
-            <Text className="text-gray-600 ml-2 flex-1 leading-5">
+            <MapPin size={18} color="#6B7280" style={{ marginTop: 4, flexShrink: 0 }} />
+            <Text className="text-gray-600 ml-2 flex-1 text-base leading-6">
               {order.address?.line1 ? 
                 `${order.address.line1}${order.address.area ? ', ' + order.address.area : ''}${order.address.city ? ', ' + order.address.city : ''}${order.address.pincode ? ' - ' + order.address.pincode : ''}` 
                 : (customer?.address || 'No address')}
               {(!order.address?.latitude || !order.address?.longitude) && (
-                <Text className="text-red-500 font-bold text-xs"> (No GPS Pin)</Text>
+                <Text className="text-red-500 font-bold text-sm"> (No GPS Pin)</Text>
               )}
             </Text>
             <TouchableOpacity 
-              className="bg-blue-50 px-3 py-1.5 rounded-lg flex-row items-center ml-2 border border-blue-100"
+              className="bg-blue-50 px-3.5 py-2 rounded-lg flex-row items-center ml-2 border border-blue-100"
               onPress={() => {
                 if (order.address?.latitude && order.address?.longitude) {
                   Linking.openURL(`https://maps.google.com/?q=${order.address.latitude},${order.address.longitude}`);
@@ -366,25 +378,25 @@ export default function OrderDetailsScreen() {
                 }
               }}
             >
-              <Navigation size={14} color="#2563EB" />
-              <Text className="text-blue-600 font-bold ml-1 text-xs">Maps</Text>
+              <Navigation size={16} color="#2563EB" />
+              <Text className="text-blue-600 font-bold ml-1.5 text-sm">Maps</Text>
             </TouchableOpacity>
           </View>
 
           {order.address?.contactName ? (
             <TouchableOpacity 
-              className="flex-row items-center mt-3 bg-gray-50 p-3 rounded-lg border border-gray-200"
+              className="flex-row items-center mt-3 bg-gray-50 p-3.5 rounded-lg border border-gray-200"
               onPress={() => {
                 const phone = order.address?.contactPhone || customer?.phone;
                 if (phone) Linking.openURL(`tel:${phone}`);
               }}
             >
-              <Text className="text-gray-700 font-medium text-sm flex-1">
+              <Text className="text-gray-700 font-medium text-base flex-1">
                 Contact: <Text className="font-bold text-gray-900">{order.address.contactName}</Text>
               </Text>
               <View className="flex-row items-center bg-green-50 px-3 py-1.5 rounded border border-green-200">
-                <Phone size={14} color="#16A34A" />
-                <Text className="text-green-700 font-bold text-xs ml-1.5 uppercase tracking-wide">Call</Text>
+                <Phone size={16} color="#16A34A" />
+                <Text className="text-green-700 font-bold text-sm ml-1.5 uppercase tracking-wide">Call</Text>
               </View>
             </TouchableOpacity>
           ) : null}
@@ -396,10 +408,10 @@ export default function OrderDetailsScreen() {
                 if (customer?.phone) Linking.openURL(`tel:${customer.phone}`);
               }}
             >
-              <Text className="text-gray-700 font-medium text-sm">Customer Phone</Text>
-              <View className="bg-green-50 px-4 py-2 rounded-lg border border-green-200 flex-row items-center">
-                <Phone size={14} color="#16A34A" />
-                <Text className="text-green-700 font-bold text-sm ml-1.5">Call</Text>
+              <Text className="text-gray-700 font-medium text-base">Customer Phone</Text>
+              <View className="bg-green-50 px-4 py-2.5 rounded-lg border border-green-200 flex-row items-center">
+                <Phone size={16} color="#16A34A" />
+                <Text className="text-green-700 font-bold text-base ml-1.5">Call</Text>
               </View>
             </TouchableOpacity>
           ) : null}
@@ -407,48 +419,48 @@ export default function OrderDetailsScreen() {
 
         {/* Order Info */}
         <View className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-4">
-          <Text className="font-bold text-gray-900 mb-3 text-base">Order Information</Text>
+          <Text className="font-bold text-gray-900 mb-3 text-lg">Order Information</Text>
           
           {order.createdAt ? (
             <View className="flex-row justify-between mb-3 pb-3 border-b border-gray-100">
-              <Text className="text-gray-600">Ordered On</Text>
-              <Text className="font-bold text-gray-900">
+              <Text className="text-gray-600 text-base">Ordered On</Text>
+              <Text className="text-base font-bold text-gray-900">
                 {new Date(order.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
               </Text>
             </View>
           ) : null}
           {typeof order.totalDepositCans === 'number' && (
             <View className="flex-row justify-between mb-3 pb-3 border-b border-gray-100">
-              <Text className="text-gray-600">Total Deposit Cans</Text>
-              <Text className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">{order.totalDepositCans}</Text>
+              <Text className="text-gray-600 text-base">Total Deposit Cans</Text>
+              <Text className="text-base font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-md">{order.totalDepositCans}</Text>
             </View>
           )}
 
           {order.items && order.items.length > 0 ? (
             <View className="mb-3 pb-3 border-b border-gray-100">
-              <Text className="text-gray-600 mb-2 font-medium">Items Breakdown</Text>
+              <Text className="text-gray-600 text-base mb-2 font-medium">Items Breakdown</Text>
               {order.items.map((item: any, idx: number) => (
-                <View key={idx} className="flex-row justify-between items-center mb-1 bg-gray-50 p-2 rounded">
-                  <Text className="text-gray-900 font-medium">{item.quantity}x {item.productName}</Text>
-                  <Text className="text-gray-700 font-bold">₹{item.price * item.quantity}</Text>
+                <View key={idx} className="flex-row justify-between items-center mb-1 bg-gray-50 p-2.5 rounded">
+                  <Text className="text-gray-900 text-base font-medium">{item.quantity}x {item.productName}</Text>
+                  <Text className="text-gray-700 text-base font-bold">₹{item.price * item.quantity}</Text>
                 </View>
               ))}
             </View>
           ) : (
             <View className="flex-row justify-between mb-3 pb-3 border-b border-gray-100">
-              <Text className="text-gray-600">Total Items</Text>
-              <Text className="font-bold text-gray-900">{order.quantity || 0} Items</Text>
+              <Text className="text-gray-600 text-base">Total Items</Text>
+              <Text className="text-base font-bold text-gray-900">{order.quantity || 0} Items</Text>
             </View>
           )}
 
           <View className="flex-row justify-between mb-3 pb-3 border-b border-gray-100">
-            <Text className="text-gray-600">Total Amount</Text>
-            <Text className="font-bold text-gray-900 text-lg">₹{Math.round(Number(order.amount || order.order?.totalAmount || 0))}</Text>
+            <Text className="text-gray-600 text-base">Total Amount</Text>
+            <Text className="font-bold text-gray-900 text-xl">₹{Math.round(Number(order.amount || order.order?.totalAmount || 0))}</Text>
           </View>
           
           <View className="flex-row justify-between">
-            <Text className="text-gray-600">Payment Method</Text>
-            <Text className={`font-bold ${isCOD ? 'text-orange-600' : 'text-green-600'}`}>
+            <Text className="text-gray-600 text-base">Payment Method</Text>
+            <Text className={`text-base font-bold ${isCOD ? 'text-orange-600' : 'text-green-600'}`}>
               {order.isQrPayment 
                 ? `QR (${order.paymentInstrument || 'UPI'})`
                 : (order.paymentMethod === 'ONLINE')
@@ -462,7 +474,7 @@ export default function OrderDetailsScreen() {
         {!isCompleted ? (
           order.status === 'OUT_FOR_DELIVERY' ? (
             <View className="mb-8">
-            <Text className="font-bold text-gray-900 mb-3 ml-1 text-base">Update Status</Text>
+            <Text className="font-bold text-gray-900 mb-3 ml-1 text-lg">Update Status</Text>
 
             {/* Action Buttons */}
             {isCOD && order.paymentStatus !== 'SUCCESS' ? (
@@ -473,7 +485,7 @@ export default function OrderDetailsScreen() {
                   disabled={submitting}
                 >
                   {updatingStatus === 'NOT_DELIVERED' && !showMarkDeliveredModal ? <ActivityIndicator color="#DC2626" /> : (
-                    <Text className="text-red-600 font-bold text-lg">Not Delivered</Text>
+                    <Text className="text-red-600 font-bold text-xl">Not Delivered</Text>
                   )}
                 </TouchableOpacity>
 
@@ -482,8 +494,8 @@ export default function OrderDetailsScreen() {
                   onPress={() => setShowCODModal(true)}
                   disabled={submitting}
                 >
-                  <Banknote size={20} color="#fff" style={{ marginRight: 8 }} />
-                  <Text className="text-white font-bold text-lg">Collect COD</Text>
+                  <Banknote size={24} color="#fff" style={{ marginRight: 8 }} />
+                  <Text className="text-white font-bold text-xl">Collect COD</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -494,7 +506,7 @@ export default function OrderDetailsScreen() {
                   disabled={submitting}
                 >
                   {updatingStatus === 'NOT_DELIVERED' && !showMarkDeliveredModal ? <ActivityIndicator color="#DC2626" /> : (
-                    <Text className="text-red-600 font-bold text-lg">Not Delivered</Text>
+                    <Text className="text-red-600 font-bold text-xl">Not Delivered</Text>
                   )}
                 </TouchableOpacity>
 
@@ -504,7 +516,7 @@ export default function OrderDetailsScreen() {
                   disabled={submitting}
                 >
                   {updatingStatus === 'DELIVERED' && !showMarkDeliveredModal ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : null}
-                  <Text className="text-white font-bold text-lg">Delivered</Text>
+                  <Text className="text-white font-bold text-xl">Delivered</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -513,16 +525,16 @@ export default function OrderDetailsScreen() {
           ) : null
         ) : (
           <View className="mb-8 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-            <Text className="font-bold text-gray-900 mb-3 text-base">Delivery Status</Text>
+            <Text className="font-bold text-gray-900 mb-3 text-lg">Delivery Status</Text>
             {order.deliveryStatus === 'DELIVERED' ? (
               <View className="bg-green-50 p-4 rounded-xl border border-green-100 flex-row items-center">
-                <View className="bg-green-100 p-2 rounded-full mr-3">
-                  <Package size={20} color="#16A34A" />
+                <View className="bg-green-100 p-2.5 rounded-full mr-4">
+                  <Package size={24} color="#16A34A" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-green-800 font-bold text-lg">Delivered</Text>
+                  <Text className="text-green-800 font-bold text-xl">Delivered</Text>
                   {order.updatedAt ? (
-                    <Text className="text-green-700 mt-0.5">
+                    <Text className="text-green-700 mt-1 text-base">
                       {new Date(order.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
                     </Text>
                   ) : null}
@@ -530,16 +542,16 @@ export default function OrderDetailsScreen() {
               </View>
             ) : (
               <View className="bg-red-50 p-4 rounded-xl border border-red-100 flex-row items-start">
-                <View className="bg-red-100 p-2 rounded-full mr-3 mt-1">
-                  <XCircle size={20} color="#DC2626" />
+                <View className="bg-red-100 p-2.5 rounded-full mr-4 mt-1">
+                  <XCircle size={24} color="#DC2626" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-red-800 font-bold text-lg">Not Delivered</Text>
+                  <Text className="text-red-800 font-bold text-xl">Not Delivered</Text>
                   {order.notDeliveredReason ? (
-                    <Text className="text-red-700 font-medium mt-1">Reason: {order.notDeliveredReason}</Text>
+                    <Text className="text-red-700 font-medium mt-1 text-base">Reason: {order.notDeliveredReason}</Text>
                   ) : null}
                   {order.updatedAt ? (
-                    <Text className="text-red-600 mt-1">
+                    <Text className="text-red-600 mt-1 text-base">
                       {new Date(order.updatedAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
                     </Text>
                   ) : null}
@@ -718,38 +730,39 @@ export default function OrderDetailsScreen() {
         animationType="fade"
         onRequestClose={() => {}}
       >
-        <View className="flex-1 bg-black/50 justify-center items-center p-6">
-          <View className="bg-white rounded-3xl p-6 w-full max-w-sm items-center shadow-lg">
-            <View className={`p-3 rounded-full mb-3 ${successStatus === 'DELIVERED' ? 'bg-green-100' : 'bg-red-100'}`}>
+        <View className="flex-1 bg-black/50 justify-center px-4">
+          <View className="bg-white rounded-2xl p-6 items-center">
+            <View className="w-full flex-row justify-end mb-2">
+              <TouchableOpacity onPress={() => {
+                setShowSuccessModal(false);
+                router.back();
+              }}>
+                <XCircle size={28} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            
+            <View className={`p-4 rounded-full mb-4 ${successStatus === 'DELIVERED' ? 'bg-green-100' : 'bg-red-100'}`}>
               {successStatus === 'DELIVERED' ? (
-                <CheckCircle2 size={34} color="#16A34A" />
+                <CheckCircle2 size={48} color="#16A34A" />
               ) : (
-                <XCircle size={34} color="#DC2626" />
+                <XCircle size={48} color="#DC2626" />
               )}
             </View>
-            <Text className="text-2xl font-black text-gray-900 mb-2">Success!</Text>
-            <Text className="text-gray-500 text-center mb-6 text-base">
-              Order marked as {successStatus === 'DELIVERED' ? 'Delivered' : 'Not Delivered'}.
+            
+            <Text className="text-xl font-bold text-gray-900 text-center mb-2">Success!</Text>
+            <Text className="text-gray-600 text-center mb-6 text-base">
+              Order has been marked as {successStatus === 'DELIVERED' ? 'Delivered' : 'Not Delivered'}
             </Text>
             
-            <View className="flex-row gap-3 w-full">
-              <TouchableOpacity 
-                className="flex-1 bg-gray-100 py-4 rounded-xl items-center shadow-sm border border-gray-200"
-                onPress={() => setShowSuccessModal(false)}
-              >
-                <Text className="text-gray-700 font-bold text-lg">Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                className="flex-1 bg-blue-600 py-4 rounded-xl items-center shadow-sm"
-                onPress={() => {
-                  setShowSuccessModal(false);
-                  router.back();
-                }}
-              >
-                <Text className="text-white font-bold text-lg">OK</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+              className="w-full bg-blue-600 py-3.5 rounded-xl items-center shadow-sm"
+              onPress={() => {
+                setShowSuccessModal(false);
+                router.back();
+              }}
+            >
+              <Text className="text-white font-bold text-lg">OK</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

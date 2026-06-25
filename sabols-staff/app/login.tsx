@@ -52,14 +52,14 @@ export default function Login() {
             source={require('../assets/logo.jpg')} 
             style={{ width: 100, height: 60, resizeMode: 'contain' }} 
           />
-          <Text className="text-2xl font-bold mt-3 text-slate-900">Staff Login</Text>
+          <Text className="text-3xl font-bold mt-3 text-slate-900">Staff Login</Text>
         </View>
 
         <View className="space-y-4">
           <View>
-            <Text className="text-sm font-medium text-slate-700 mb-2">Email</Text>
+            <Text className="text-base font-medium text-slate-700 mb-2">Email</Text>
             <TextInput
-              className="bg-white border border-slate-200 rounded-md px-3 py-3 text-slate-900 text-base"
+              className="bg-white border border-slate-200 rounded-md px-3 py-3 text-slate-900 text-lg"
               placeholder="Enter your email"
               value={emailOrUsername}
               onChangeText={setEmailOrUsername}
@@ -69,9 +69,9 @@ export default function Login() {
           </View>
 
           <View>
-            <Text className="text-sm font-medium text-slate-700 mb-2 mt-2">Password</Text>
+            <Text className="text-base font-medium text-slate-700 mb-2 mt-2">Password</Text>
             <TextInput
-              className="bg-white border border-slate-200 rounded-md px-3 py-3 text-slate-900 text-base"
+              className="bg-white border border-slate-200 rounded-md px-3 py-3 text-slate-900 text-lg"
               placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
@@ -87,10 +87,10 @@ export default function Login() {
             {loading ? (
               <View className="flex-row items-center">
                 <ActivityIndicator color="#fff" size="small" className="mr-2" />
-                <Text className="text-white font-medium text-base">Signing in...</Text>
+                <Text className="text-white font-medium text-lg">Signing in...</Text>
               </View>
             ) : (
-              <Text className="text-white font-medium text-base">Sign In</Text>
+              <Text className="text-white font-medium text-lg">Sign In</Text>
             )}
           </TouchableOpacity>
         </View>
