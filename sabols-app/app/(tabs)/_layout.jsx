@@ -8,12 +8,12 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: true,
         headerTitle: () => (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4 }}>
+          <View style={{ marginLeft: 4, justifyContent: 'center' }}>
             <Image 
-              source={require('../../assets/icon.png')} 
-              style={{ width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: 'white', marginRight: 8 }} 
+              source={require('../../assets/icon_topbar.png')} 
+              style={{ width: 100, height: 35 }}
+              resizeMode="contain"
             />
-            <Text style={{ fontSize: 22, fontWeight: 'bold', color: 'black', letterSpacing: -0.5 }}>SABOLS</Text>
           </View>
         ),
         headerTitleAlign: 'left',

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Modal, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MapPin, Plus, Pencil, Trash2, Star, X } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import AddressForm from './AddressForm';

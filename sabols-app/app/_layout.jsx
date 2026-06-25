@@ -5,13 +5,17 @@ import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import * as Notifications from 'expo-notifications';
 
 // Ensure notifications show up as popups even when the app is actively open on the screen
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (e) {
+  console.log("Push notifications are not supported in Expo Go");
+}
 
 const toastConfig = {
   success: (props) => (

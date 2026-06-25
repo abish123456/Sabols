@@ -815,39 +815,49 @@ export default function ProfileScreen() {
       </Modal>
 
       {/* ─── Payment Methods Modal ─────────────────────────────────────── */}
-      <Modal visible={showPaymentsModal} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView className="flex-1 bg-[#f3f7fb]">
-          <View className="flex-row justify-between items-center p-4 border-b border-gray-200 bg-white">
-            <Text className="text-lg font-bold text-black">Payment Methods</Text>
-            <TouchableOpacity onPress={() => setShowPaymentsModal(false)} className="w-8 h-8 items-center justify-center rounded-full bg-gray-100">
-              <X size={20} color="#000" />
+      <Modal visible={showPaymentsModal} animationType="slide" transparent>
+        <View className="flex-1 justify-end bg-black/50">
+          <View className="bg-white rounded-t-3xl p-6 max-h-[80%]">
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className="text-xl font-bold text-black flex-row items-center">
+                <CreditCard size={20} color="#0ea5e9" /> Payment Methods
+              </Text>
+              <TouchableOpacity onPress={() => setShowPaymentsModal(false)}>
+                <X size={24} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView className="space-y-4" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text className="text-sm text-gray-500 mb-2">Saved payment methods cannot be edited directly. Delete them and add a new one during checkout if needed.</Text>
+              
+              <Text className="font-bold text-black mt-2">Saved UPI IDs</Text>
+              {paymentMethods.upi && paymentMethods.upi.length > 0 ? paymentMethods.upi.map(pm => (
+                <View key={pm.id} className="bg-white p-4 rounded-xl border border-gray-200 flex-row justify-between items-center">
+                  <Text className="font-semibold text-black">{pm.details}</Text>
+                  {pm.isDefault && <Text className="text-xs font-bold text-[#0ea5e9] bg-sky-50 px-2 py-1 rounded">Default</Text>}
+                </View>
+              )) : <Text className="text-sm text-gray-500 italic">No saved UPI IDs</Text>}
+
+              <Text className="font-bold text-black mt-4">Saved Cards</Text>
+              {paymentMethods.card && paymentMethods.card.length > 0 ? paymentMethods.card.map(pm => (
+                <View key={pm.id} className="bg-white p-4 rounded-xl border border-gray-200 flex-row justify-between items-center">
+                  <View>
+                    <Text className="font-semibold text-black">
+                      **** **** **** {pm.cardLast4 || 'XXXX'} {pm.cardBrand ? `(${pm.cardBrand})` : ''}
+                    </Text>
+                    {pm.razorpayTokenId && <Text className="text-xs text-[#0ea5e9] font-bold mt-1">⚡ Quick Pay active</Text>}
+                  </View>
+                  {pm.isDefault && <Text className="text-xs font-bold text-[#0ea5e9] bg-sky-50 px-2 py-1 rounded">Default</Text>}
+                </View>
+              )) : <Text className="text-sm text-gray-500 italic">No saved cards</Text>}
+              <View className="h-4" />
+            </ScrollView>
+            
+            <TouchableOpacity onPress={() => setShowPaymentsModal(false)} className="mt-4 py-4 bg-gray-100 rounded-xl items-center">
+              <Text className="font-bold text-gray-700">Close</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView className="flex-1 p-4 space-y-4" keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <Text className="text-sm text-gray-500 mb-2">Saved payment methods cannot be edited directly. Delete them and add a new one during checkout if needed.</Text>
-            
-            <Text className="font-bold text-black mt-2">Saved UPI IDs</Text>
-            {paymentMethods.upi && paymentMethods.upi.length > 0 ? paymentMethods.upi.map(pm => (
-              <View key={pm.id} className="bg-white p-4 rounded-xl border border-gray-200 flex-row justify-between items-center">
-                <Text className="font-semibold text-black">{pm.details}</Text>
-                {pm.isDefault && <Text className="text-xs font-bold text-[#0ea5e9] bg-sky-50 px-2 py-1 rounded">Default</Text>}
-              </View>
-            )) : <Text className="text-sm text-gray-500 italic">No saved UPI IDs</Text>}
-
-            <Text className="font-bold text-black mt-4">Saved Cards</Text>
-            {paymentMethods.card && paymentMethods.card.length > 0 ? paymentMethods.card.map(pm => (
-              <View key={pm.id} className="bg-white p-4 rounded-xl border border-gray-200 flex-row justify-between items-center">
-                <View>
-                  <Text className="font-semibold text-black">
-                    **** **** **** {pm.cardLast4 || 'XXXX'} {pm.cardBrand ? `(${pm.cardBrand})` : ''}
-                  </Text>
-                  {pm.razorpayTokenId && <Text className="text-xs text-[#0ea5e9] font-bold mt-1">⚡ Quick Pay active</Text>}
-                </View>
-                {pm.isDefault && <Text className="text-xs font-bold text-[#0ea5e9] bg-sky-50 px-2 py-1 rounded">Default</Text>}
-              </View>
-            )) : <Text className="text-sm text-gray-500 italic">No saved cards</Text>}
-          </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
 
           {/* Powered By STEDAXIS */}
