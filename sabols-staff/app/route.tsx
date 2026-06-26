@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert, Refre
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
-import { LogOut, MapPin, Phone, User, Package, CheckCircle2, XCircle, Clock, Map as MapIcon, LayoutGrid, ChevronRight, RefreshCw, ShoppingBag, Truck, Reply, List, Grid, Banknote, QrCode } from 'lucide-react-native';
+import { LogOut, MapPin, Phone, User, Package, CheckCircle2, XCircle, Clock, Map as MapIcon, LayoutGrid, ChevronRight, RefreshCw, ShoppingBag, Truck, Reply, List, Grid, Banknote, QrCode, AlertTriangle, HelpCircle } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { API_URL } from '../lib/config';
 
@@ -46,7 +46,21 @@ export default function RouteScreen() {
   const [pollIntervalId, setPollIntervalId] = useState<any>(null);
   const [isGeneratingQR, setIsGeneratingQR] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [successModalData, setSuccessModalData] = useState<{ visible: boolean, message: string }>({ visible: false, message: '' });
+  const [alertModalData, setAlertModalData] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'confirm';
+    onConfirm?: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  }>({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'success'
+  });
 
   const fetchRoute = useCallback(async () => {
     try {
@@ -160,10 +174,12 @@ export default function RouteScreen() {
         orderToUpdate.address.longitude
       );
       if (distance > 100) {
-        Alert.alert(
-          'Too Far',
-          `You are ${Math.round(distance)} meters away from the delivery location. You must be within 100 meters to ${actionName}.`
-        );
+        setAlertModalData({
+          visible: true,
+          type: 'warning',
+          title: 'Too Far',
+          message: `You are ${Math.round(distance)} meters away from the delivery location. You must be within 100 meters to ${actionName}.`
+        });
         return false;
       }
       return true;
@@ -342,8 +358,10 @@ export default function RouteScreen() {
         setNotDeliveredReason('');
         setCustomReason('');
         fetchRoute(); // Refresh the list
-        setSuccessModalData({ 
+        setAlertModalData({ 
           visible: true, 
+          type: 'success',
+          title: 'Success!',
           message: `Order has been marked as ${status === 'DELIVERED' ? 'Delivered' : 'Not Delivered'}` 
         });
       } else {
@@ -465,7 +483,15 @@ export default function RouteScreen() {
             ) : (
               <TouchableOpacity 
                 className="flex-1 bg-green-600 py-3 rounded-lg items-center shadow-sm flex-row justify-center"
-                onPress={() => handleUpdateStatus(item.id, 'DELIVERED')}
+                onPress={() => {
+                  setAlertModalData({
+                    visible: true,
+                    type: 'confirm',
+                    title: "Confirm Delivery",
+                    message: "Are you sure you want to mark this order as delivered?",
+                    onConfirm: () => handleUpdateStatus(item.id, 'DELIVERED')
+                  });
+                }}
                 disabled={updatingOrderId === item.id}
               >
                 {updatingOrderId === item.id && updatingStatus === 'DELIVERED' ? <ActivityIndicator size="small" color="#fff" className="mr-2" /> : null}
@@ -556,7 +582,15 @@ export default function RouteScreen() {
               ) : (
                 <TouchableOpacity 
                   className="flex-1 bg-green-600 py-1.5 rounded items-center justify-center flex-row"
-                  onPress={() => handleUpdateStatus(item.id, 'DELIVERED')}
+                  onPress={() => {
+                    setAlertModalData({
+                      visible: true,
+                      type: 'confirm',
+                      title: "Confirm Delivery",
+                      message: "Are you sure you want to mark this order as delivered?",
+                      onConfirm: () => handleUpdateStatus(item.id, 'DELIVERED')
+                    });
+                  }}
                   disabled={updatingOrderId === item.id}
                 >
                   {updatingOrderId === item.id && updatingStatus === 'DELIVERED' ? <ActivityIndicator size="small" color="#fff" /> : (
@@ -786,37 +820,20 @@ export default function RouteScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
-              <TouchableOpacity
-                onPress={() => setNotDeliveredReason('Other')}
-                className={`flex-row items-center p-4 rounded-xl border ${notDeliveredReason === 'Other' ? 'bg-red-50 border-red-500' : 'bg-gray-50 border-gray-200'}`}
-              >
-                <View className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${notDeliveredReason === 'Other' ? 'border-red-600' : 'border-gray-400'}`}>
-                  {notDeliveredReason === 'Other' && <View className="w-2.5 h-2.5 rounded-full bg-red-600" />}
-                </View>
-                <Text className={`flex-1 text-base ${notDeliveredReason === 'Other' ? 'text-red-700 font-bold' : 'text-gray-700 font-medium'}`}>
-                  Other Reason
-                </Text>
-              </TouchableOpacity>
             </View>
 
-            {notDeliveredReason === 'Other' && (
-              <TextInput
-                className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-base text-gray-900 mb-4 h-24"
-                placeholder="Type your reason here..."
-                multiline
-                textAlignVertical="top"
-                value={customReason}
-                onChangeText={setCustomReason}
-              />
-            )}
-
             <TouchableOpacity
-              className={`w-full py-4 rounded-xl items-center flex-row justify-center ${(!notDeliveredReason || (notDeliveredReason === 'Other' && !customReason.trim())) ? 'bg-red-300' : 'bg-red-600'}`}
-              disabled={!notDeliveredReason || (notDeliveredReason === 'Other' && !customReason.trim()) || updatingStatus === 'NOT_DELIVERED'}
+              className={`w-full py-4 rounded-xl items-center flex-row justify-center ${!notDeliveredReason ? 'bg-red-300' : 'bg-red-600'}`}
+              disabled={!notDeliveredReason || updatingStatus === 'NOT_DELIVERED'}
               onPress={() => {
                 if (selectedOrderId) {
-                  const finalReason = notDeliveredReason === 'Other' ? customReason : notDeliveredReason;
-                  handleUpdateStatus(selectedOrderId, 'NOT_DELIVERED', finalReason);
+                  setAlertModalData({
+                    visible: true,
+                    type: 'confirm',
+                    title: "Confirm Non-Delivery",
+                    message: "Are you sure you want to mark this order as not delivered?",
+                    onConfirm: () => handleUpdateStatus(selectedOrderId, 'NOT_DELIVERED', notDeliveredReason)
+                  });
                 }
               }}
             >
@@ -884,7 +901,15 @@ export default function RouteScreen() {
 
                 <TouchableOpacity 
                   className="w-full bg-blue-600 py-4 rounded-xl items-center shadow-sm flex-row justify-center mb-3"
-                  onPress={handleMarkAsPaid}
+                  onPress={() => {
+                    setAlertModalData({
+                      visible: true,
+                      type: 'confirm',
+                      title: "Confirm Payment",
+                      message: "Are you sure you have collected the cash and want to mark as delivered?",
+                      onConfirm: () => handleMarkAsPaid()
+                    });
+                  }}
                   disabled={submitting || isGeneratingQR}
                 >
                   {submitting ? <ActivityIndicator color="#fff" /> : (
@@ -919,34 +944,78 @@ export default function RouteScreen() {
         </View>
       </Modal>
 
-      {/* Success Modal */}
+      {/* Alert/Confirmation Modal */}
       <Modal
-        visible={successModalData.visible}
+        visible={alertModalData.visible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setSuccessModalData({ visible: false, message: '' })}
+        onRequestClose={() => {
+          if (alertModalData.type === 'confirm' && alertModalData.onCancel) {
+            alertModalData.onCancel();
+          }
+          setAlertModalData({ ...alertModalData, visible: false });
+        }}
       >
         <View className="flex-1 bg-black/50 justify-center px-4">
           <View className="bg-white rounded-2xl p-6 items-center">
             <View className="w-full flex-row justify-end mb-2">
-              <TouchableOpacity onPress={() => setSuccessModalData({ visible: false, message: '' })}>
+              <TouchableOpacity onPress={() => {
+                if (alertModalData.type === 'confirm' && alertModalData.onCancel) {
+                  alertModalData.onCancel();
+                }
+                setAlertModalData({ ...alertModalData, visible: false });
+              }}>
                 <XCircle size={28} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
             
-            <View className="bg-green-100 p-4 rounded-full mb-4">
-              <CheckCircle2 size={48} color="#16A34A" />
+            <View className={`p-4 rounded-full mb-4 ${
+              alertModalData.type === 'success' ? 'bg-green-100' : 
+              alertModalData.type === 'error' ? 'bg-red-100' : 
+              alertModalData.type === 'warning' ? 'bg-orange-100' : 
+              'bg-blue-100'
+            }`}>
+              {alertModalData.type === 'success' && <CheckCircle2 size={48} color="#16A34A" />}
+              {alertModalData.type === 'error' && <XCircle size={48} color="#DC2626" />}
+              {alertModalData.type === 'warning' && <AlertTriangle size={48} color="#EA580C" />}
+              {alertModalData.type === 'confirm' && <HelpCircle size={48} color="#2563EB" />}
             </View>
             
-            <Text className="text-xl font-bold text-gray-900 text-center mb-2">Success!</Text>
-            <Text className="text-gray-600 text-center mb-6 text-base">{successModalData.message}</Text>
+            <Text className="text-xl font-bold text-gray-900 text-center mb-2">{alertModalData.title}</Text>
+            <Text className="text-gray-600 text-center mb-6 text-base">{alertModalData.message}</Text>
             
-            <TouchableOpacity 
-              className="w-full bg-blue-600 py-3.5 rounded-xl items-center shadow-sm"
-              onPress={() => setSuccessModalData({ visible: false, message: '' })}
-            >
-              <Text className="text-white font-bold text-lg">OK</Text>
-            </TouchableOpacity>
+            {alertModalData.type === 'confirm' ? (
+              <View className="flex-row gap-3 w-full">
+                <TouchableOpacity 
+                  className="flex-1 bg-gray-100 py-3.5 rounded-xl items-center"
+                  onPress={() => {
+                    if (alertModalData.onCancel) alertModalData.onCancel();
+                    setAlertModalData({ ...alertModalData, visible: false });
+                  }}
+                >
+                  <Text className="text-gray-700 font-bold text-lg">{alertModalData.cancelText || 'Cancel'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  className="flex-1 bg-blue-600 py-3.5 rounded-xl items-center shadow-sm"
+                  onPress={() => {
+                    if (alertModalData.onConfirm) alertModalData.onConfirm();
+                    setAlertModalData({ ...alertModalData, visible: false });
+                  }}
+                >
+                  <Text className="text-white font-bold text-lg">{alertModalData.confirmText || 'Confirm'}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity 
+                className="w-full bg-blue-600 py-3.5 rounded-xl items-center shadow-sm"
+                onPress={() => {
+                  if (alertModalData.onConfirm) alertModalData.onConfirm();
+                  setAlertModalData({ ...alertModalData, visible: false });
+                }}
+              >
+                <Text className="text-white font-bold text-lg">{alertModalData.confirmText || 'OK'}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
