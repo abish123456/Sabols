@@ -148,9 +148,8 @@ export async function DELETE(
         const resolvedParams = await Promise.resolve(context.params);
         const { id } = resolvedParams;
 
-        // Check if role is in use
         const adminsUsingRole = await query(
-            `SELECT id FROM "Admin" WHERE "roleId" = $1 LIMIT 1`,
+            `SELECT "A" FROM "_AdminToAdminRole" WHERE "B" = $1 LIMIT 1`,
             [id]
         );
 
