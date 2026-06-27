@@ -30,6 +30,8 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
+    SelectGroup,
+    SelectLabel
 } from '../../../components/ui/select';
 
 const CATEGORIES = {
@@ -57,7 +59,8 @@ const EVENT_OPTIONS_BY_CATEGORY = {
         link_generated: "Link Generated",
         link_copied: "Link Copied",
         redistribution: "Bulk Order Assignment (Redistribution)",
-        delivery_staff_change: "Delivery Staff Change"
+        delivery_staff_change: "Delivery Staff Change",
+        shift_actions: "Shift Activity"
     },
     customer: {
         all: "All Customer Events",
@@ -76,6 +79,7 @@ const EVENT_OPTIONS_BY_CATEGORY = {
         all: "All System Events",
         login: "Admin Login",
         hub_location: "Hub Location Settings",
+        shift_settings: "Shift Time Settings",
         cutoff_settings: "Adjust Cut-off",
         holiday_settings: "Holiday Settings",
         support_contacts: "Support Contacts",
@@ -86,6 +90,7 @@ const EVENT_OPTIONS_BY_CATEGORY = {
 
 const ENTITY_LABELS = {
     ROUTE: 'Delivery Route',
+    ROUTE_SHIFT: 'Shift Activity',
     DELIVERY_BOY: 'Delivery Staff',
     DELIVERY_STAFF: 'Delivery Staff',
     SERVICE_ROUTE: 'Service Route',
@@ -113,7 +118,11 @@ const ACTION_LABELS = {
     DELETE: 'Removed',
     APPROVE_DEPOSIT_REFUND: 'Approved Refund',
     REJECT_DEPOSIT_REFUND: 'Rejected Refund',
-    TOKEN_GENERATED: 'Generated Link'
+    TOKEN_GENERATED: 'Generated Link',
+    START_SHIFT: 'Shift Started',
+    PAUSE_SHIFT: 'Shift Paused',
+    RESUME_SHIFT: 'Shift Resumed',
+    END_SHIFT: 'Shift Ended'
 };
 
 const DIFF_KEY_LABELS = {
@@ -147,6 +156,11 @@ const DIFF_KEY_LABELS = {
     'areaName': 'Area Name',
     'hubLocation.lat': 'Latitude',
     'hubLocation.lng': 'Longitude',
+    'sameDayCutOffMinute': 'Same-Day Cut-off Minute',
+    'hour': 'Hour',
+    'minute': 'Minute',
+    'overrideDate': 'Override Date',
+    'overrideCleared': 'Override Cleared',
     'cutOffTime': 'Cut Off Time',
     'roleName': 'Role',
     'updatedAt': 'Updated At',
@@ -580,13 +594,24 @@ export default function AuditLogsPage() {
 
     const fetchAdmins = async () => {
         try {
-            const res = await adminFetch('/api/admin/admins');
-            const data = await res.json();
-            if (data.success) {
-                setAdmins(data.admins || []);
+            const [adminsRes, staffRes] = await Promise.all([
+                adminFetch('/api/admin/admins'),
+                adminFetch('/api/admin/delivery-boys')
+            ]);
+            
+            const adminsData = await adminsRes.json();
+            const staffData = await staffRes.json();
+            
+            let combined = [];
+            if (adminsData.success && adminsData.admins) {
+                combined = [...combined, ...adminsData.admins.map(a => ({ ...a, _type: 'ADMIN' }))];
             }
+            if (staffData.success && staffData.deliveryBoys) {
+                combined = [...combined, ...staffData.deliveryBoys.map(s => ({ ...s, username: s.phone, _type: 'STAFF' }))];
+            }
+            setAdmins(combined);
         } catch (err) {
-            console.error('Failed to fetch admins list for filtering:', err);
+            console.error('Failed to fetch actors list for filtering:', err);
         }
     };
 
@@ -619,7 +644,7 @@ export default function AuditLogsPage() {
     const fetchAdminLogs = async (page, limit, categoryFilter = selectedCategory, eventFilter = selectedEventFilter, adminFilter = selectedAdminFilter) => {
         setIsLoadingAdmin(true);
         try {
-            let url = `/api/admin/audit-logs?page=${page}&limit=${limit}&actorType=ADMIN`;
+            let url = `/api/admin/audit-logs?page=${page}&limit=${limit}&actorType=ADMIN,DELIVERY_BOY,SYSTEM`;
             if (categoryFilter !== 'all') {
                 url += `&category=${categoryFilter}`;
             }
@@ -906,18 +931,31 @@ export default function AuditLogsPage() {
                                             <span className="font-semibold text-gray-700 shrink-0">Admin</span>
                                             <span className="text-gray-600 truncate">
                                                 {selectedAdminFilter === 'all'
-                                                    ? 'All Admins'
-                                                    : (admins.find(a => a.id === selectedAdminFilter)?.name || admins.find(a => a.id === selectedAdminFilter)?.username || 'All Admins')}
+                                                    ? 'All Actors'
+                                                    : (admins.find(a => a.id === selectedAdminFilter)?.name || admins.find(a => a.id === selectedAdminFilter)?.username || 'All Actors')}
                                             </span>
                                         </div>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="all">All Admins</SelectItem>
-                                        {admins.map((adm) => (
-                                            <SelectItem key={adm.id} value={adm.id}>
-                                                {adm.name || adm.username}
-                                            </SelectItem>
-                                        ))}
+                                        <SelectItem value="all">All Actors</SelectItem>
+                                        
+                                        <SelectGroup>
+                                            <SelectLabel>Admins</SelectLabel>
+                                            {admins.filter(a => a._type === 'ADMIN').map((admin) => (
+                                                <SelectItem key={admin.id} value={admin.id}>
+                                                    {admin.name || admin.username}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectGroup>
+                                        
+                                        <SelectGroup>
+                                            <SelectLabel>Delivery Staff</SelectLabel>
+                                            {admins.filter(a => a._type === 'STAFF').map((staff) => (
+                                                <SelectItem key={staff.id} value={staff.id}>
+                                                    {staff.name || staff.username}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectGroup>
                                     </SelectContent>
                                 </Select>
 
@@ -943,7 +981,7 @@ export default function AuditLogsPage() {
                                             <TableHeader className="sticky top-0 bg-white z-10 shadow-[0_1px_2px_-1px_rgba(0,0,0,0.1)]">
                                                 <TableRow className="bg-gray-50/50 hover:bg-gray-50/50">
                                                     <TableHead className="w-[15%] font-bold text-xs text-gray-500 tracking-wider text-center">DATE & TIME</TableHead>
-                                                    <TableHead className="w-[15%] font-bold text-xs text-gray-500 tracking-wider text-center">ADMIN</TableHead>
+                                                    <TableHead className="w-[15%] font-bold text-xs text-gray-500 tracking-wider text-center">ACTOR</TableHead>
                                                     <TableHead className="w-[15%] font-bold text-xs text-gray-500 tracking-wider text-center">RESOURCE</TableHead>
                                                     <TableHead className="w-[15%] font-bold text-xs text-gray-500 tracking-wider text-center">ACTION</TableHead>
                                                     <TableHead className="w-[35%] font-bold text-xs text-gray-500 tracking-wider text-left">DESCRIPTION</TableHead>

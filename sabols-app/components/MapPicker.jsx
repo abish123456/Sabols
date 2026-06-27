@@ -37,8 +37,9 @@ export default React.memo(function MapPicker({ onLocationSelect, initialLocation
   };
 
   const html = useMemo(() => {
-    const lat = startLoc.current.latitude;
-    const lng = startLoc.current.longitude;
+    const lat = initialLocation?.latitude || defaultLocation.latitude;
+    const lng = initialLocation?.longitude || defaultLocation.longitude;
+    startLoc.current = { latitude: lat, longitude: lng };
 
     return /* html */`<!DOCTYPE html>
 <html>
@@ -190,7 +191,7 @@ export default React.memo(function MapPicker({ onLocationSelect, initialLocation
   </script>
 </body>
 </html>`;
-  }, []);
+  }, [initialLocation?.latitude, initialLocation?.longitude]);
 
   const getCurrentLocation = async () => {
     setIsLoading(true);

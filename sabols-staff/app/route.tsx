@@ -31,6 +31,8 @@ export default function RouteScreen() {
   const [activeTab, setActiveTab] = useState('PENDING');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [summary, setSummary] = useState<any>(null);
+  const [shift, setShift] = useState<any>(null);
+  const [isShiftLoading, setIsShiftLoading] = useState(false);
   const [returnRequests, setReturnRequests] = useState<any[]>([]);
   const [notDeliveredReasons, setNotDeliveredReasons] = useState<string[]>([]);
   const [confirmingReturnId, setConfirmingReturnId] = useState<string | null>(null);
@@ -84,6 +86,7 @@ export default function RouteScreen() {
       if (response.ok && data.success) {
         setRouteOrders(data.route ? data.route.orders : []);
         setSummary(data.route?.summary || null);
+        setShift(data.route?.shift || null);
         setReturnRequests(data.route?.returnRequests || []);
         setNotDeliveredReasons(data.route?.notDeliveredReasons || []);
       } else {
@@ -153,6 +156,43 @@ export default function RouteScreen() {
       Alert.alert("Error", "Failed to confirm collection");
     } finally {
       setConfirmingReturnId(null);
+    }
+  };
+
+  const handleShiftAction = async (action: 'start' | 'pause' | 'resume' | 'end') => {
+    if (action === 'end') {
+      // For ending shift, double confirm
+      Alert.alert('End Shift', 'Are you sure you want to end your shift? You will not be able to modify orders after this.', [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'End Shift', 
+          style: 'destructive',
+          onPress: () => performShiftAction(action)
+        }
+      ]);
+    } else {
+      performShiftAction(action);
+    }
+  };
+
+  const performShiftAction = async (action: 'start' | 'pause' | 'resume' | 'end') => {
+    try {
+      setIsShiftLoading(true);
+      const token = await AsyncStorage.getItem('staffToken');
+      const response = await fetch(`${API_URL}/api/delivery/shift/${action}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        fetchRoute(); // refresh data
+      } else {
+        Alert.alert('Shift Action Failed', data.message || `Failed to ${action} shift`);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Network error');
+    } finally {
+      setIsShiftLoading(false);
     }
   };
 
@@ -391,7 +431,8 @@ export default function RouteScreen() {
           pathname: `/order/${item.id}`,
           params: { 
             order: JSON.stringify(item),
-            reasons: JSON.stringify(notDeliveredReasons)
+            reasons: JSON.stringify(notDeliveredReasons),
+            shiftStatus: shift?.status || 'UNKNOWN'
           }
         })}
       >
@@ -409,7 +450,7 @@ export default function RouteScreen() {
                 <View className="flex-col items-end gap-1">
                   <View className={`flex-row items-center px-1.5 py-0.5 rounded ${isDelivered ? 'bg-green-50' : isFailed ? 'bg-red-50' : 'bg-orange-50'}`}>
                     <Text className={`text-sm font-bold mr-1 ${isDelivered ? 'text-green-600' : isFailed ? 'text-red-600' : 'text-orange-600'}`}>
-                      {isDelivered ? 'DELIVERED' : isFailed ? 'NOT DELIVERED' : 'DELIVERY IN PROGRESS'}
+                      {isDelivered ? 'DELIVERED' : isFailed ? 'NOT DELIVERED' : item.status ? item.status.replace(/_/g, ' ') : 'PENDING'}
                     </Text>
                     {isDelivered && <CheckCircle2 size={12} color="#16A34A" strokeWidth={3} />}
                     {isFailed && <XCircle size={10} color="#DC2626" strokeWidth={3} />}
@@ -457,6 +498,15 @@ export default function RouteScreen() {
 
         {isPending && item.status === 'OUT_FOR_DELIVERY' && (
           <View className="flex-row gap-2 mt-3 ml-11 border-t border-gray-100 pt-3">
+            {shift && shift.status !== 'ACTIVE' ? (
+              <View className="flex-1 bg-gray-100 py-3 rounded-lg items-center justify-center">
+                <Text className="text-gray-500 font-bold">
+                  {shift.status === 'NOT_STARTED' ? 'Start shift to deliver' : 
+                   shift.status === 'PAUSED' ? 'Resume shift to deliver' : 'Shift ended'}
+                </Text>
+              </View>
+            ) : (
+              <>
             <TouchableOpacity 
               className="flex-1 bg-red-50 border border-red-200 py-3 rounded-lg items-center justify-center flex-row"
               onPress={() => {
@@ -497,6 +547,8 @@ export default function RouteScreen() {
                 {updatingOrderId === item.id && updatingStatus === 'DELIVERED' ? <ActivityIndicator size="small" color="#fff" className="mr-2" /> : null}
                 <Text className="text-white font-bold text-base">Delivered</Text>
               </TouchableOpacity>
+            )}
+              </>
             )}
           </View>
         )}
@@ -548,12 +600,20 @@ export default function RouteScreen() {
         
         <View className={`mt-2 flex-row justify-center items-center py-1 rounded-md ${isDelivered ? 'bg-green-50' : isFailed ? 'bg-red-50' : 'bg-orange-50'}`}>
           <Text className={`text-xs font-bold ${isDelivered ? 'text-green-600' : isFailed ? 'text-red-600' : 'text-orange-600'}`}>
-            {isDelivered ? 'DELIVERED' : isFailed ? 'NOT DELIVERED' : 'DELIVERY IN PROGRESS'}
+            {isDelivered ? 'DELIVERED' : isFailed ? 'NOT DELIVERED' : item.status ? item.status.replace(/_/g, ' ') : 'PENDING'}
           </Text>
         </View>
 
         {isPending && item.status === 'OUT_FOR_DELIVERY' && (
           <View className="gap-1 mt-2 border-t border-gray-100 pt-2">
+            {shift && shift.status !== 'ACTIVE' ? (
+              <View className="bg-gray-100 p-1.5 rounded items-center">
+                <Text className="text-gray-500 text-xs font-bold">
+                  {shift.status === 'NOT_STARTED' ? 'Start shift to deliver' : 
+                   shift.status === 'PAUSED' ? 'Resume shift to deliver' : 'Shift ended'}
+                </Text>
+              </View>
+            ) : (
             <View className="flex-row gap-1">
               <TouchableOpacity 
                 className="flex-1 bg-red-50 border border-red-200 py-1.5 rounded items-center justify-center flex-row"
@@ -599,6 +659,7 @@ export default function RouteScreen() {
                 </TouchableOpacity>
               )}
             </View>
+            )}
           </View>
         )}
       </TouchableOpacity>
@@ -629,6 +690,84 @@ export default function RouteScreen() {
 
   const ListHeader = () => (
     <View className="mb-3">
+      {shift && (
+        <View className={`rounded-xl p-4 mb-4 shadow-sm border ${
+          shift.status === 'ACTIVE' ? 'bg-green-50 border-green-200' :
+          shift.status === 'PAUSED' ? 'bg-orange-50 border-orange-200' :
+          shift.status === 'ENDED' ? 'bg-gray-100 border-gray-200' :
+          'bg-white border-blue-200'
+        }`}>
+          <View className="flex-row justify-between items-center mb-2">
+            <Text className={`text-sm font-bold uppercase tracking-wider ${
+              shift.status === 'ACTIVE' ? 'text-green-700' :
+              shift.status === 'PAUSED' ? 'text-orange-700' :
+              shift.status === 'ENDED' ? 'text-gray-600' :
+              'text-blue-700'
+            }`}>
+              {shift.status.replace('_', ' ')}
+            </Text>
+            {shift.status === 'NOT_STARTED' && (
+              <Text className="text-xs text-gray-500">
+                Starts after {shift.shiftStartTime}
+              </Text>
+            )}
+          </View>
+
+          <View className="flex-row gap-2 mt-2">
+            {shift.status === 'NOT_STARTED' && (
+              <TouchableOpacity
+                className={`flex-1 py-3 rounded-lg items-center ${shift.canStartNow ? 'bg-blue-600' : 'bg-gray-300'}`}
+                onPress={() => handleShiftAction('start')}
+                disabled={!shift.canStartNow || isShiftLoading}
+              >
+                {isShiftLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text className={`font-bold ${shift.canStartNow ? 'text-white' : 'text-gray-500'}`}>Start Shift</Text>}
+              </TouchableOpacity>
+            )}
+            {shift.status === 'ACTIVE' && (
+              <>
+                <TouchableOpacity
+                  className="flex-1 bg-orange-500 py-3 rounded-lg items-center"
+                  onPress={() => handleShiftAction('pause')}
+                  disabled={isShiftLoading}
+                >
+                  {isShiftLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-white font-bold">Pause Shift</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-red-600 py-3 rounded-lg items-center"
+                  onPress={() => handleShiftAction('end')}
+                  disabled={isShiftLoading}
+                >
+                  {isShiftLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-white font-bold">End Shift</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+            {shift.status === 'PAUSED' && (
+              <>
+                <TouchableOpacity
+                  className="flex-1 bg-green-600 py-3 rounded-lg items-center"
+                  onPress={() => handleShiftAction('resume')}
+                  disabled={isShiftLoading}
+                >
+                  {isShiftLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-white font-bold">Resume Shift</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-red-600 py-3 rounded-lg items-center"
+                  onPress={() => handleShiftAction('end')}
+                  disabled={isShiftLoading}
+                >
+                  {isShiftLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text className="text-white font-bold">End Shift</Text>}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+          {shift.status === 'NOT_STARTED' && !shift.canStartNow && (
+            <Text className="text-xs text-red-500 mt-2 text-center">
+              You can only start your shift after {shift.shiftStartTime}
+            </Text>
+          )}
+        </View>
+      )}
+
       <View className="flex-row justify-between items-center mb-3">
         <View className="flex-row items-end">
           <Text className="text-2xl font-extrabold text-gray-900">Today's Route</Text>

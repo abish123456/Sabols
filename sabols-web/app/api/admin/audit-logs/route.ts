@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
         values.push('ORDER');
       } else if (category === 'route') {
         conditions.push(`al."entity" = ANY($${paramIndex++})`);
-        values.push(['ROUTE', 'SERVICE_ROUTE']);
+        values.push(['ROUTE', 'SERVICE_ROUTE', 'ROUTE_SHIFT']);
       } else if (category === 'customer') {
         conditions.push(`al."entity" = $${paramIndex++}`);
         values.push('CUSTOMER');
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       } else if (category === 'system') {
         conditions.push(`al."entity" = ANY($${paramIndex++}) AND al."entityId" != ANY($${paramIndex++})`);
         values.push(['SYSTEM_SETTING', 'SYSTEM_CONFIG', 'ADMIN', 'ADMIN_ROLE', 'HOLIDAY', 'SUPPORT_CONTACT', 'SESSION']);
-        values.push(['SAME_DAY_CUTOFF_HOUR', 'SAME_DAY_CUTOFF_MINUTE']);
+        values.push(['SAME_DAY_CUTOFF_HOUR', 'SAME_DAY_CUTOFF_MINUTE', 'SHIFT_START_TIME']);
       }
     }
 
@@ -85,8 +85,14 @@ export async function GET(req: NextRequest) {
       } else if (eventType === 'redistribution') {
         conditions.push(`al."entity" = $${paramIndex++} AND al."action" = 'UPDATE' AND al."description" ILIKE '%redistributed%'`);
         values.push('ROUTE');
+      } else if (eventType === 'shift_actions') {
+        conditions.push(`al."entity" = $${paramIndex++}`);
+        values.push('ROUTE_SHIFT');
       } else if (eventType === 'hub_location') {
         conditions.push(`al."entity" = $${paramIndex++} AND al."entityId" = 'HUB_LOCATION'`);
+        values.push('SYSTEM_CONFIG');
+      } else if (eventType === 'shift_settings') {
+        conditions.push(`al."entity" = $${paramIndex++} AND al."entityId" = 'SHIFT_START_TIME'`);
         values.push('SYSTEM_CONFIG');
       } else if (eventType === 'products') {
         conditions.push(`al."entity" = $${paramIndex++}`);
@@ -155,8 +161,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (actorType) {
-      conditions.push(`al."actorType" = $${paramIndex++}`);
-      values.push(actorType);
+      if (actorType.includes(',')) {
+        const types = actorType.split(',').map(t => t.trim());
+        conditions.push(`al."actorType" = ANY($${paramIndex++})`);
+        values.push(types);
+      } else {
+        conditions.push(`al."actorType" = $${paramIndex++}`);
+        values.push(actorType);
+      }
     }
 
     // Hide noisy route generation logs from the general admin logs list, only show them inside order details
@@ -184,8 +196,8 @@ export async function GET(req: NextRequest) {
 
     const logsResult = await query(
       `SELECT al.*, 
-             au.name as "adminName",
-             au.username as "adminUsername",
+             COALESCE(au.name, db.name, cust.name) as "adminName",
+             COALESCE(au.username, db.phone, cust.phone) as "adminUsername",
              CASE 
                WHEN al.entity = 'ORDER' THEN (SELECT c.name FROM "Order" o JOIN "Customer" c ON o."customerId" = c.id WHERE o.id = al."entityId")
                WHEN al.entity = 'CUSTOMER' THEN (SELECT c.name FROM "Customer" c WHERE c.id = al."entityId")
@@ -221,6 +233,8 @@ export async function GET(req: NextRequest) {
              END as "customerId"
       FROM "AuditLog" al
       LEFT JOIN "Admin" au ON al."actorId" = au.id AND al."actorType" = 'ADMIN'
+      LEFT JOIN "DeliveryBoy" db ON al."actorId" = db.id AND al."actorType" = 'DELIVERY_BOY'
+      LEFT JOIN "Customer" cust ON al."actorId" = cust.id AND al."actorType" = 'CUSTOMER'
       ${whereClause} 
       ORDER BY al."createdAt" ${sortOrder} 
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
