@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 const MapPicker = dynamic(() => import('../../../components/app/MapPicker'), { ssr: false });
 const RouteMap = dynamic(() => import('../../../components/app/RouteMap'), { ssr: false });
+import ShiftTimeDialog from '../../../components/admin/ShiftTimeDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import {
@@ -20,7 +21,7 @@ import { Calendar } from '../../../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../components/ui/popover';
 import { Alert, AlertDescription } from '../../../components/ui/alert';
 import { format } from 'date-fns';
-import { Route, Plus, CalendarIcon, Copy, CheckCircle2, Loader2, AlertCircle, Shuffle, ChevronLeft, ChevronRight, RefreshCcw, History, UserPlus, Edit, Truck, Search, Check, ChevronsUpDown, ChevronUp, ChevronDown, GripVertical, MapPin, List, MapIcon } from 'lucide-react';
+import { Route, Plus, CalendarIcon, Copy, CheckCircle2, Loader2, AlertCircle, Shuffle, ChevronLeft, ChevronRight, RefreshCcw, History, UserPlus, Edit, Truck, Search, Check, ChevronsUpDown, ChevronUp, ChevronDown, GripVertical, MapPin, List, MapIcon, Clock } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import toast from 'react-hot-toast';
 import { adminFetch } from '../../../lib/admin-api';
@@ -110,6 +111,8 @@ export default function RoutesPage() {
   const [hubLocation, setHubLocation] = useState(null);
   const [showHubDialog, setShowHubDialog] = useState(false);
   const [isSavingHub, setIsSavingHub] = useState(false);
+
+  const [showShiftTimeDialog, setShowShiftTimeDialog] = useState(false);
 
   const [showOptimizePrompt, setShowOptimizePrompt] = useState(false);
   const [routeToOptimize, setRouteToOptimize] = useState(null);
@@ -255,6 +258,8 @@ export default function RoutesPage() {
             isSubmitted: dailyMatch?.isSubmitted || false,
             submittedAt: dailyMatch?.submittedAt || null,
             isAutoOptimized: dailyMatch?.isAutoOptimized || false,
+            shiftStatus: dailyMatch?.shiftStatus || null,
+            routeShiftId: dailyMatch?.routeShiftId || null,
           };
         });
 
@@ -660,9 +665,14 @@ export default function RoutesPage() {
   const handleOptimizePath = async () => {
     if (!ordersDialogRoute?.routeId || isOptimizing) return;
 
+    const isPaused = ordersDialogRoute?.shiftStatus === 'PAUSED';
+    const endpoint = isPaused 
+      ? `/api/admin/routes/${ordersDialogRoute.routeId}/re-optimize`
+      : `/api/admin/routes/${ordersDialogRoute.routeId}/optimize`;
+
     setIsOptimizing(true);
     try {
-      const response = await adminFetch(`/api/admin/routes/${ordersDialogRoute.routeId}/optimize`, {
+      const response = await adminFetch(endpoint, {
         method: 'POST'
       });
       const data = await response.json();
@@ -745,13 +755,19 @@ export default function RoutesPage() {
         </div>
         <div className="flex flex-col items-end gap-1">
           
-          <div className="flex items-center gap-4">
-            {hasPermission('set_hub_location') && (
-              <Button variant="outline" onClick={() => setShowHubDialog(true)} className="gap-2 text-blue-500 border-blue-200 hover:bg-blue-50">
-                <MapPin className="h-4 w-4" />
-                Set Hub Location
-              </Button>
-            )}
+            <div className="flex items-center gap-4">
+              {hasPermission('set_hub_location') && (
+                <>
+                  <Button variant="outline" onClick={() => setShowShiftTimeDialog(true)} className="gap-2 text-indigo-500 border-indigo-200 hover:bg-indigo-50">
+                    <Clock className="h-4 w-4" />
+                    Shift Time
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowHubDialog(true)} className="gap-2 text-blue-500 border-blue-200 hover:bg-blue-50">
+                    <MapPin className="h-4 w-4" />
+                    Set Hub Location
+                  </Button>
+                </>
+              )}
             <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
 
               <PopoverTrigger asChild>
@@ -836,7 +852,7 @@ export default function RoutesPage() {
                     <TableHead>Date</TableHead>
                     <TableHead>Delivery Staff</TableHead>
                     <TableHead>Orders</TableHead>
-                    <TableHead>Route Link</TableHead>
+                    <TableHead>Shift Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -899,125 +915,44 @@ export default function RoutesPage() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="w-[250px] align-top">
-                          {(() => {
-                            // Only show link controls if assigned
-                            if (!route.isAssigned) {
-                              return <span className="text-xs text-muted-foreground italic">Assign staff first</span>;
-                            }
-
-                            // Check if this is a future date first
-                            if (!isActive && !isToday) {
-                              return (
-                                <span className="text-xs text-muted-foreground italic flex items-center">
-                                  <CalendarIcon className="h-3 w-3 mr-1" />
-                                  Available on delivery date
-                                </span>
-                              );
-                            }
-
-                            // If 0 orders AND 0 refunds (regardless of whether route record exists), don't show generate button
-                            if (isActive && !route.token && route.orderCount === 0 && (!route.refundCount || route.refundCount === 0)) {
-                              return <span className="text-xs text-muted-foreground italic tracking-tight">No orders or refunds for link</span>;
-                            }
-
-                            const isCopied = copiedRoutes[route.id];
-                            const isGen = isGenerating[route.id];
-
-                            return (
-                              <div className="flex flex-col gap-2 w-full">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  {isExpired ? (
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-muted-foreground italic font-medium flex items-center px-2 py-1">
-                                        <AlertCircle className="h-3 w-3 mr-1" />
-                                        Link Expired
-                                      </span>
-                                    </div>
-                                  ) : route.token ? (
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 py-1 font-medium whitespace-nowrap">
-                                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                                        Link Generated
-                                      </Badge>
-                                      {hasPermission('copy_route_links') && (
-                                        <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-primary hover:bg-primary/10 shrink-0"
-                                        onClick={(e) => { e.stopPropagation(); handleCopyLink(route); }}
-                                        title="Copy Link"
-                                      >
-                                        <Copy className="h-4 w-4" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  ) : hasPermission('generate_route_links') ? (
-                                    <Button
-                                      variant="default"
-                                      size="sm"
-                                      onClick={(e) => { e.stopPropagation(); generateToken(route); }}
-                                      className={cn(
-                                        "text-xs bg-primary hover:bg-primary/90 whitespace-nowrap",
-                                        isGen && "opacity-70"
-                                      )}
-                                      disabled={isGen}
-                                    >
-                                      {isGen ? (
-                                        <>
-                                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                          Generating...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Plus className="h-3 w-3 mr-1" />
-                                          Generate Link
-                                        </>
-                                      )}
-                                    </Button>
-                                  ) : null}
-
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-gray-400 hover:text-gray-600 shrink-0"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setHistoryRoute(route);
-                                      setShowHistoryDialog(true);
-                                    }}
-                                    title="View Full History"
-                                  >
-                                    <History className="h-4 w-4" />
-                                  </Button>
-                                </div>
-
-                                {/* Mini Logs Below */}
-                                {route.tokenLogs && route.tokenLogs.length > 0 && (
-                                  <div className="space-y-1 w-full">
-                                    {route.tokenLogs.slice(0, 3).map((log, idx) => (
-                                      <div key={idx} className="text-[10px] text-muted-foreground flex items-center justify-between gap-2 border-l-2 border-primary/20 pl-2">
-                                        <span className="font-medium truncate max-w-[80px]">
-                                          {log.action === 'GENERATED' ? 'Generated' : 'Copied'}
-                                        </span>
-                                        <span className="whitespace-nowrap">
-                                          {formatInTimeZone(new Date(log.generatedAt), 'Asia/Kolkata', 'hh:mm:ss a')}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {route.tokenLogs.length > 3 && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); setHistoryRoute(route); setShowHistoryDialog(true); }}
-                                        className="text-[10px] text-primary hover:underline font-medium block"
-                                      >
-                                        View More (+{route.tokenLogs.length - 3})
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                        <TableCell className="w-[150px] align-top">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              {!route.isAssigned ? (
+                                <span className="text-sm text-gray-400 italic">Unassigned</span>
+                              ) : !route.shiftStatus || route.shiftStatus === 'NOT_STARTED' ? (
+                                <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-gray-200">
+                                  Not Started
+                                </Badge>
+                              ) : route.shiftStatus === 'ACTIVE' ? (
+                                <Badge variant="default" className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-1.5 animate-pulse"></span>
+                                  Active
+                                </Badge>
+                              ) : route.shiftStatus === 'PAUSED' ? (
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                  Paused
+                                </Badge>
+                              ) : route.shiftStatus === 'COMPLETED' ? (
+                                <Badge variant="default" className="bg-green-50 text-green-700 border-green-200">
+                                  Completed
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 text-gray-500 hover:text-gray-900" 
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setHistoryRoute(route); 
+                                setShowHistoryDialog(true); 
+                              }}
+                              title="View Route Logs"
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1185,13 +1120,24 @@ export default function RoutesPage() {
                         </TableCell>
                         <TableCell className="text-xs">
                           <Badge 
-                            variant={log.action === 'SUBMITTED' ? 'default' : log.action === 'GENERATED' ? 'secondary' : 'outline'} 
+                            variant={
+                              log.action === 'SUBMITTED' ? 'default' : 
+                              log.action === 'GENERATED' || log.action === 'RESUME_SHIFT' || log.action === 'START_SHIFT' || log.action === 'OPTIMIZE_ROUTE' || log.action === 'RE_OPTIMISED' ? 'secondary' : 
+                              log.action === 'END_SHIFT' ? 'default' :
+                              'outline'
+                            } 
                             className={cn(
                               "text-[10px]", 
-                              log.action === 'SUBMITTED' && "bg-green-600 hover:bg-green-600 text-white font-bold"
+                              log.action === 'SUBMITTED' && "bg-green-600 hover:bg-green-600 text-white font-bold",
+                              log.action === 'START_SHIFT' && "bg-blue-100 text-blue-700 border-blue-200",
+                              log.action === 'PAUSE_SHIFT' && "bg-amber-100 text-amber-700 border-amber-200",
+                              log.action === 'RESUME_SHIFT' && "bg-blue-100 text-blue-700 border-blue-200",
+                              log.action === 'END_SHIFT' && "bg-green-100 text-green-700 border-green-200",
+                              log.action === 'OPTIMIZE_ROUTE' && "bg-purple-100 text-purple-700 border-purple-200",
+                              log.action === 'RE_OPTIMISED' && "bg-purple-100 text-purple-700 border-purple-200"
                             )}
                           >
-                            {log.action}
+                            {log.action.replace('_', ' ')}
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -1279,7 +1225,10 @@ export default function RoutesPage() {
               <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                 <p>No orders found for this route.</p>
               </div>
-            ) : (
+            ) : (() => {
+              const isLocked = !!ordersDialogRoute?.shiftStatus && ordersDialogRoute.shiftStatus !== 'NOT_STARTED';
+              
+              return (
               <div className="overflow-x-auto">
                 <Table className="min-w-[1200px]">
                   <TableHeader className="bg-slate-50">
@@ -1291,11 +1240,11 @@ export default function RoutesPage() {
                             type="checkbox"
                             className={cn(
                               "h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500",
-                              ordersDialogRoute?.token ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                              isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                             )}
                             checked={selectedRouteOrders.length > 0 && selectedOrderIds.size === selectedRouteOrders.length}
                             onChange={toggleSelectAll}
-                            disabled={!!ordersDialogRoute?.token}
+                            disabled={isLocked}
                           />
                         </div>
                       </TableHead>
@@ -1316,7 +1265,7 @@ export default function RoutesPage() {
                       return (
                         <TableRow
                           key={order.id}
-                          draggable={!isSavingSort && !!ordersDialogRoute?.routeId && !ordersDialogRoute?.token}
+                          draggable={!isSavingSort && !!ordersDialogRoute?.routeId && !isLocked}
                           onDragStart={(e) => onDragStart(e, index)}
                           onDragOver={(e) => onDragOver(e, index)}
                           onDragEnd={onDragEnd}
@@ -1326,13 +1275,13 @@ export default function RoutesPage() {
                             isDragging && "opacity-40 bg-slate-100",
                             isDragOver && "border-t-2 border-t-blue-500 bg-blue-50/30",
                             highlightedOrderId === order.id && "bg-yellow-40 ring-2 ring-yellow-400 ring-inset shadow-sm",
-                            ordersDialogRoute?.token && "cursor-not-allowed opacity-80"
+                            isLocked && "cursor-not-allowed opacity-80"
                           )}
                         >
                           <TableCell className="py-4 w-10 text-center px-0">
                             <div className={cn(
                               "flex items-center justify-center text-slate-300 transition-colors",
-                              (ordersDialogRoute?.routeId && !ordersDialogRoute?.token) ? "cursor-grab active:cursor-grabbing hover:text-slate-500" : "opacity-50"
+                              (ordersDialogRoute?.routeId && !isLocked) ? "cursor-grab active:cursor-grabbing hover:text-slate-500" : "opacity-50"
                             )}>
                               <GripVertical className="h-5 w-5" />
                             </div>
@@ -1343,11 +1292,11 @@ export default function RoutesPage() {
                                 type="checkbox"
                                 className={cn(
                                   "h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500",
-                                  ordersDialogRoute?.token ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
+                                  isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
                                 )}
                                 checked={selectedOrderIds.has(order.id)}
                                 onChange={() => toggleOrderSelection(order.id)}
-                                disabled={!!ordersDialogRoute?.token}
+                                disabled={isLocked}
                               />
                             </div>
                           </TableCell>
@@ -1436,61 +1385,80 @@ export default function RoutesPage() {
                   </TableBody>
                 </Table>
               </div>
-            )}
+              );
+            })()}
           </div>
 
           <DialogFooter className="p-6 border-t bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              {selectedOrderIds.size > 0 && (
+              {selectedOrderIds.size > 0 && (() => {
+                  const isLocked = !!ordersDialogRoute?.shiftStatus && ordersDialogRoute.shiftStatus !== 'NOT_STARTED';
+                  return (
                 <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 mr-2">
                   <span className="text-sm font-bold text-blue-700">{selectedOrderIds.size} Selected</span>
                   <div className="h-4 w-[1px] bg-blue-200 mx-1" />
                 {hasPermission('change_order_route') && (
-                  <Select onValueChange={handleMoveOrders} disabled={isRedistributing || !!ordersDialogRoute?.token}>
+                  <Select onValueChange={handleMoveOrders} disabled={isRedistributing || isLocked}>
                     <SelectTrigger className="h-8 w-[180px] text-xs bg-white border-blue-200 focus:ring-blue-500">
-                      <SelectValue placeholder={ordersDialogRoute?.token ? "Locked (Link Generated)" : "Move to Route..."} />
+                      <SelectValue placeholder={isLocked ? "Locked (Shift in progress)" : "Move to Route..."} />
                     </SelectTrigger>
                     <SelectContent>
                       {routes
-                        .filter(r => r.id !== ordersDialogRoute?.id && !r.token)
+                        .filter(r => r.id !== ordersDialogRoute?.id && (!r.shiftStatus || r.shiftStatus === 'NOT_STARTED'))
                         .map(r => (
                           <SelectItem key={r.id} value={r.id} className="text-xs">
                             {r.name} ({r.deliveryBoyName || 'No Staff'})
                           </SelectItem>
                         ))
                       }
-                      {routes.filter(r => r.id !== ordersDialogRoute?.id && !r.token).length === 0 && (
+                      {routes.filter(r => r.id !== ordersDialogRoute?.id && (!r.shiftStatus || r.shiftStatus === 'NOT_STARTED')).length === 0 && (
                         <div className="px-2 py-1.5 text-xs text-muted-foreground italic">No other available routes</div>
                       )}
                     </SelectContent>
                   </Select>
                 )}
                 </div>
-              )}
+                  );
+                })()}
               {hasUnsavedSort && (
                 <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-200">
                   Unsaved Changes
                 </Badge>
               )}
-              {ordersDialogRoute?.token ? (
-                <span className="text-xs text-muted-foreground italic">
-                  <span className="text-red-500">*</span> Sorting is disabled (Link Generated)
-                </span>
-              ) : !ordersDialogRoute?.routeId ? (
-                <span className="text-xs text-muted-foreground italic">
-                  <span className="text-red-500">*</span> Sorting is disabled
-                </span>
-              ) : null}
+              {(() => {
+                  const isLocked = !!ordersDialogRoute?.shiftStatus && ordersDialogRoute.shiftStatus !== 'NOT_STARTED';
+                  if (isLocked) {
+                      return (
+                        <span className="text-xs text-muted-foreground italic">
+                          <span className="text-red-500">*</span> Sorting is disabled (Shift in progress)
+                        </span>
+                      );
+                  }
+                  if (!ordersDialogRoute?.routeId) {
+                      return (
+                        <span className="text-xs text-muted-foreground italic">
+                          <span className="text-red-500">*</span> Sorting is disabled
+                        </span>
+                      );
+                  }
+                  return null;
+              })()}
             </div>
             <div className="flex items-center gap-3">
+              {(() => {
+                const canOptimize = !ordersDialogRoute?.shiftStatus || ordersDialogRoute.shiftStatus === 'NOT_STARTED' || ordersDialogRoute.shiftStatus === 'PAUSED';
+                const isReoptimizing = ordersDialogRoute?.shiftStatus === 'PAUSED' || (selectedRouteOrders.some(o => o.sequence === 0) && selectedRouteOrders.some(o => o.sequence > 0));
+                
+                return (
+                  <>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleOptimizePath}
-                disabled={isOptimizing || !ordersDialogRoute?.routeId || ordersDialogRoute?.token || selectedRouteOrders.some(o => !o.address.latitude || !o.address.longitude)}
+                disabled={isOptimizing || !ordersDialogRoute?.routeId || !canOptimize || selectedRouteOrders.some(o => !o.address.latitude || !o.address.longitude)}
                 className={cn(
                   "transition-all duration-300",
-                  selectedRouteOrders.some(o => o.sequence === 0) && selectedRouteOrders.some(o => o.sequence > 0)
+                  isReoptimizing
                     ? "bg-amber-600 text-white border-amber-600 hover:bg-amber-700 hover:border-amber-700 shadow-md ring-2 ring-amber-200"
                     : "text-blue-600 border-blue-200 hover:bg-blue-50",
                   selectedRouteOrders.some(o => !o.address.latitude || !o.address.longitude) && "opacity-50 cursor-not-allowed border-red-200 text-red-400"
@@ -1499,12 +1467,12 @@ export default function RoutesPage() {
               >
                 {isOptimizing ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : selectedRouteOrders.some(o => o.sequence === 0) && selectedRouteOrders.some(o => o.sequence > 0) ? (
+                ) : isReoptimizing ? (
                   <RefreshCcw className="h-4 w-4 mr-2" />
                 ) : (
                   <Shuffle className="h-4 w-4 mr-2" />
                 )}
-                {selectedRouteOrders.some(o => o.sequence === 0) && selectedRouteOrders.some(o => o.sequence > 0) ? "Re-Optimise Path" : "Auto-Optimise Path"}
+                {isReoptimizing ? "Re-Optimise Path" : "Auto-Optimise Path"}
               </Button>
               <Button
                 variant="outline"
@@ -1516,19 +1484,18 @@ export default function RoutesPage() {
               <Button
                 className="bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={handleSaveSort}
-                disabled={!hasUnsavedSort || isSavingSort || ordersDialogRoute?.token || !ordersDialogRoute?.routeId}
+                disabled={!hasUnsavedSort || isSavingSort || isLocked || !ordersDialogRoute?.routeId}
               >
                 {isSavingSort ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Saving...
                   </>
-                ) : ordersDialogRoute?.token ? (
-                  'Save'
-                ) : (
-                  'Save'
-                )}
+                ) : 'Save'}
               </Button>
+              </>
+                );
+              })()}
             </div>
           </DialogFooter>
         </DialogContent>
@@ -1587,6 +1554,7 @@ export default function RoutesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ShiftTimeDialog open={showShiftTimeDialog} onOpenChange={setShowShiftTimeDialog} selectedDate={selectedDate} />
     </div >
   );
 }

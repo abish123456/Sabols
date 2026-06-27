@@ -24,13 +24,14 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 export default function OrderDetailsScreen() {
-  const { id, reasons } = useLocalSearchParams();
+  const searchParams = useLocalSearchParams();
+  const { id } = searchParams;
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [reasons, setReasons] = useState<any[]>([]);
+  const [shiftStatus, setShiftStatus] = useState<string>('UNKNOWN');
   
-  const notDeliveredReasonsList = reasons ? JSON.parse(reasons as string) : [];
-
   // Form states
   const [deliveredAmount, setDeliveredAmount] = useState('');
   const [notDeliveredReason, setNotDeliveredReason] = useState('');
@@ -49,6 +50,12 @@ export default function OrderDetailsScreen() {
 
   useEffect(() => {
     fetchOrderDetails();
+    if (searchParams.reasons) {
+      try { setReasons(JSON.parse(searchParams.reasons as string)); } catch (e) {}
+    }
+    if (searchParams.shiftStatus) {
+      setShiftStatus(searchParams.shiftStatus as string);
+    }
   }, [id]);
 
   const fetchOrderDetails = async () => {
@@ -325,7 +332,7 @@ export default function OrderDetailsScreen() {
             order.deliveryStatus === 'DELIVERED' ? 'text-green-800' : 'text-red-800'
           }`}>
             {(!order.deliveryStatus || order.deliveryStatus === 'PENDING') 
-              ? (order.status ? order.status.replace(/_/g, ' ').replace('OUT FOR DELIVERY', 'DELIVERY IN PROGRESS') : 'IN PROGRESS')
+              ? (order.status ? order.status.replace(/_/g, ' ') : 'PENDING')
               : order.deliveryStatus.replace(/_/g, ' ')}
           </Text>
         </View>
@@ -476,8 +483,18 @@ export default function OrderDetailsScreen() {
             <View className="mb-8">
             <Text className="font-bold text-gray-900 mb-3 ml-1 text-lg">Update Status</Text>
 
-            {/* Action Buttons */}
-            {isCOD && order.paymentStatus !== 'SUCCESS' ? (
+            {/* Shift Check before Action Buttons */}
+            {shiftStatus !== 'ACTIVE' ? (
+              <View className="bg-gray-100 p-4 rounded-xl items-center border border-gray-200">
+                <Text className="text-gray-500 text-base font-bold">
+                  {shiftStatus === 'NOT_STARTED' ? 'Start shift to deliver' : 
+                   shiftStatus === 'PAUSED' ? 'Resume shift to deliver' : 'Shift ended'}
+                </Text>
+              </View>
+            ) : (
+              <>
+                {/* Action Buttons */}
+                {isCOD && order.paymentStatus !== 'SUCCESS' ? (
               <View className="mb-8 flex-row gap-3">
                 <TouchableOpacity 
                   className="flex-1 bg-red-50 border border-red-200 py-4 rounded-xl items-center"
@@ -520,7 +537,8 @@ export default function OrderDetailsScreen() {
                 </TouchableOpacity>
               </View>
             )}
-
+              </>
+            )}
             </View>
           ) : null
         ) : (
@@ -666,8 +684,8 @@ export default function OrderDetailsScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {notDeliveredReasonsList.length > 0 ? (
-                notDeliveredReasonsList.map((reason: string, index: number) => (
+              {reasons.length > 0 ? (
+                reasons.map((reason: string, index: number) => (
                   <TouchableOpacity
                     key={index}
                     className="py-4 border-b border-gray-100 flex-row items-center justify-between"
