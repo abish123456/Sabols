@@ -31,7 +31,7 @@ export default function Login() {
       if (response.ok && data.success) {
         await AsyncStorage.setItem('staffToken', data.token);
         await AsyncStorage.setItem('staffName', data.profile.name);
-        router.replace('/route');
+        router.replace('/routes');
       } else {
         Alert.alert('Login Failed', data.message || 'Invalid credentials');
       }
