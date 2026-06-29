@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Linking, Modal, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useFocusEffect } from 'expo-router';
-import { LogOut, MapPin, Phone, User, Package, CheckCircle2, XCircle, Clock, Map as MapIcon, LayoutGrid, ChevronRight, RefreshCw, ShoppingBag, Truck, Reply, List, Grid, Banknote, QrCode, AlertTriangle, HelpCircle } from 'lucide-react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { LogOut, MapPin, Phone, User, Package, CheckCircle2, XCircle, Clock, Map as MapIcon, LayoutGrid, ChevronRight, RefreshCw, ShoppingBag, Truck, Reply, List, Grid, Banknote, QrCode, AlertTriangle, HelpCircle, ArrowLeft } from 'lucide-react-native';
 import * as Location from 'expo-location';
-import { API_URL } from '../lib/config';
+import { API_URL } from '../../lib/config';
 
 // Helper function to calculate distance in meters (Haversine formula)
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
@@ -24,6 +24,8 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 export default function RouteScreen() {
+  const { id } = useLocalSearchParams();
+  const [routeArea, setRouteArea] = useState('');
   const [routeOrders, setRouteOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +77,7 @@ export default function RouteScreen() {
       const name = await AsyncStorage.getItem('staffName');
       if (name) setStaffName(name);
 
-      const response = await fetch(`${API_URL}/api/delivery/route/today`, {
+      const response = await fetch(`${API_URL}/api/delivery/routes/today`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -84,11 +86,18 @@ export default function RouteScreen() {
       const data = await response.json();
       
       if (response.ok && data.success) {
-        setRouteOrders(data.route ? data.route.orders : []);
-        setSummary(data.route?.summary || null);
-        setShift(data.route?.shift || null);
-        setReturnRequests(data.route?.returnRequests || []);
-        setNotDeliveredReasons(data.route?.notDeliveredReasons || []);
+        const routeData = data.routes?.find((r: any) => r.id === id);
+        if (routeData) {
+          setRouteArea(routeData.area || '');
+          setRouteOrders(routeData.orders || []);
+          setSummary(routeData.summary || null);
+          setShift(routeData.shift || null);
+          setReturnRequests(routeData.returnRequests || []);
+          setNotDeliveredReasons(routeData.notDeliveredReasons || []);
+        } else {
+          Alert.alert('Error', 'Route not found for today');
+          router.replace('/routes');
+        }
       } else {
         if (response.status === 401) {
           await AsyncStorage.removeItem('staffToken');
@@ -181,7 +190,11 @@ export default function RouteScreen() {
       const token = await AsyncStorage.getItem('staffToken');
       const response = await fetch(`${API_URL}/api/delivery/shift/${action}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ routeId: id })
       });
       const data = await response.json();
       if (response.ok && data.success) {
@@ -865,14 +878,18 @@ export default function RouteScreen() {
   return (
     <SafeAreaView className="flex-1 bg-slate-50 relative">
       <View className="bg-slate-50 px-4 pt-4 pb-2 flex-row justify-between items-center">
-        <View className="flex-row items-center flex-wrap">
-          <Text className="text-base font-medium text-gray-600 mr-1.5">Welcome,</Text>
-          <Text className="text-2xl font-extrabold text-gray-900">{staffName || 'Delivery Staff'}</Text>
-          <Text className="text-2xl ml-1">👋</Text>
+        <View className="flex-row items-center flex-1 pr-2">
+          <TouchableOpacity 
+            onPress={() => router.replace('/routes')} 
+            className="w-10 h-10 bg-white border border-gray-100 rounded-xl items-center justify-center shadow-sm mr-3"
+          >
+            <ArrowLeft size={20} color="#374151" strokeWidth={2.5} />
+          </TouchableOpacity>
+          <View className="flex-1">
+            <Text className="text-sm font-medium text-gray-500 uppercase tracking-wider">Route</Text>
+            <Text className="text-xl font-extrabold text-gray-900" numberOfLines={1}>{routeArea || 'Route Details'}</Text>
+          </View>
         </View>
-        <TouchableOpacity onPress={handleLogout} className="w-10 h-10 bg-white border border-gray-100 rounded-xl items-center justify-center shadow-sm">
-          <LogOut size={18} color="#EF4444" strokeWidth={2.5} />
-        </TouchableOpacity>
       </View>
 
       <View className="flex-1 px-3 pt-2">

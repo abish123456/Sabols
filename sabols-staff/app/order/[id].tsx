@@ -74,14 +74,18 @@ export default function OrderDetailsScreen() {
   const fetchOrderDetails = async () => {
     try {
       const token = await AsyncStorage.getItem('staffToken');
-      const response = await fetch(`${API_URL}/api/delivery/route/today`, {
+      const response = await fetch(`${API_URL}/api/delivery/routes/today`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
       
       if (response.ok && data.success) {
-        const ordersArray = data.route?.orders || data.data || [];
-        const found = ordersArray.find((o: any) => o.id === id);
+        let found = null;
+        for (const route of (data.routes || [])) {
+          found = route.orders?.find((o: any) => o.id === id);
+          if (found) break;
+        }
+
         if (found) {
           setOrder(found);
           setDeliveredAmount(found.quantity ? found.quantity.toString() : '');
@@ -95,7 +99,7 @@ export default function OrderDetailsScreen() {
             setShowMarkDeliveredModal(true);
           }
         } else {
-          Alert.alert('Error', 'Order not found in today\'s route');
+          Alert.alert('Error', 'Order not found in today\'s routes');
           router.back();
         }
       }

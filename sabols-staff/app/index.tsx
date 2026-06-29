@@ -12,7 +12,7 @@ export default function Home() {
       try {
         const token = await AsyncStorage.getItem('staffToken');
         if (token) {
-          setInitialRoute('/route');
+          setInitialRoute('/routes');
         } else {
           setInitialRoute('/login');
         }
