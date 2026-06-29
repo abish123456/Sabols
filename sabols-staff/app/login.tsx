@@ -31,7 +31,19 @@ export default function Login() {
       if (response.ok && data.success) {
         await AsyncStorage.setItem('staffToken', data.token);
         await AsyncStorage.setItem('staffName', data.profile.name);
-        router.replace('/route');
+        
+        // Register for push notifications and send token to backend
+        try {
+          const { registerForPushNotificationsAsync, sendTokenToBackend } = await import('../hooks/usePushNotifications');
+          const pushToken = await registerForPushNotificationsAsync();
+          if (pushToken) {
+            await sendTokenToBackend(pushToken);
+          }
+        } catch (pushErr) {
+          console.log('Failed to register push notifications:', pushErr);
+        }
+
+        router.replace('/routes');
       } else {
         Alert.alert('Login Failed', data.message || 'Invalid credentials');
       }

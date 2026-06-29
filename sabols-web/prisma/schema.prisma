@@ -164,6 +164,7 @@ model DeliveryBoy {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   onLeave            Boolean        @default(false)
+  pushToken          String?
   routes             Route[]
   currentStaffRoutes ServiceRoute[] @relation("CurrentStaff")
 
