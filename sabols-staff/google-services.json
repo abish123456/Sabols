@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "475494903524",
+    "project_id": "sabols-staff-app",
+    "storage_bucket": "sabols-staff-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:475494903524:android:ad0cc86774a548fd71c6f1",
+        "android_client_info": {
+          "package_name": "com.sabols.staff"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJfvSZO4qBz3gBV-aVWeBqrrBhz1ioyAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
