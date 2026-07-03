@@ -422,7 +422,7 @@ export default function AdminsPage() {
                                                                     email: admin.email,
                                                                     password: '',
                                                                     name: admin.name || '',
-                                                                    phone: admin.deliveryBoyPhone || '',
+                                                                    phone: admin.deliveryBoyPhone ? admin.deliveryBoyPhone.replace(/^\+91/, '') : '',
                                                                     roleIds: admin.roles ? admin.roles.map(r => r.id) : [],
                                                                     active: admin.active !== false
                                                                 });
