@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
       if (startDateParam && endDateParam) {
         const endDate = new Date(endDateParam);
         endDate.setHours(23, 59, 59, 999);
-        
+
         dateFilterStr = `AND wt."createdAt" >= $${paramCount} AND wt."createdAt" <= $${paramCount + 1}`;
         params.push(new Date(startDateParam), endDate);
       }
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         WHERE "cansInHand" > 0 OR "depositWalletBalance" > 0
         ORDER BY "depositWalletBalance" DESC
       `);
-      
+
       const customers = result.rows;
 
       const summary = customers.reduce((acc, customer) => {
