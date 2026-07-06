@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query } from '../../../../../lib/db';
 import { verifyAdminAuthWithPermission } from '../../../../../lib/admin-auth';
+import { formatDateIST } from '../../../../../lib/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
           c."name",
           c."phone",
           wt."amount" AS "amount",
-          wt."createdAt" AS "createdAt",
+          to_char(wt."createdAt" AT TIME ZONE 'Asia/Kolkata' AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
           wt."description" AS "description",
           wt."referenceId" AS "referenceId",
           wt."referenceType" AS "referenceType",
@@ -54,7 +55,28 @@ export async function GET(req: NextRequest) {
       `;
 
       const transactionsRes = await query(transactionsQuery, params);
-      const history = transactionsRes.rows;
+      const history = transactionsRes.rows.map(t => ({
+        ...t,
+        createdAtIST: t.createdAt ? formatDateIST(new Date(t.createdAt), {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: true
+        }) : 'N/A',
+        createdAtISTDateOnly: t.createdAt ? formatDateIST(new Date(t.createdAt), {
+          year: 'numeric',
+          month: 'short',
+          day: '2-digit'
+        }) : 'N/A',
+        createdAtISTTimeOnly: t.createdAt ? formatDateIST(new Date(t.createdAt), {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        }) : 'N/A'
+      }));
 
       const summary = {
         totalDepositsCollected: history.reduce((sum, t) => sum + Number(t.amount || 0), 0),

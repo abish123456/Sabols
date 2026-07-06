@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { format, subMonths } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
@@ -160,8 +161,8 @@ export default function DepositReportPage() {
           c.phone || 'N/A',
           c.depositWalletBalance || 0
         ]) : filteredData.map(tx => [
-          tx.createdAt ? format(new Date(tx.createdAt), 'yyyy-MM-dd') : 'N/A',
-          tx.createdAt ? format(new Date(tx.createdAt), 'hh:mm a') : 'N/A',
+          tx.createdAtISTDateOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'yyyy-MM-dd') : 'N/A'),
+          tx.createdAtISTTimeOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'hh:mm a') : 'N/A'),
           tx.orderNumber || '-',
           tx.customerId ? tx.customerId.slice(-8).toUpperCase() : 'N/A',
           tx.name || 'N/A',
@@ -452,8 +453,8 @@ export default function DepositReportPage() {
                         <TableRow key={`${tx.transactionId}-${index}`}>
                           <TableCell className="font-medium pl-6">
                             <div className="flex flex-col">
-                              <span>{tx.createdAt ? format(new Date(tx.createdAt), 'MMM dd, yyyy') : 'N/A'}</span>
-                              <span className="text-xs text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), 'hh:mm a') : ''}</span>
+                              <span>{tx.createdAtISTDateOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'MMM dd, yyyy') : 'N/A')}</span>
+                              <span className="text-xs text-muted-foreground">{tx.createdAtISTTimeOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'hh:mm a') : '')}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-gray-600">
