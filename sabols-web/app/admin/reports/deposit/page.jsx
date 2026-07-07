@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { format, subMonths } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
@@ -146,7 +147,7 @@ export default function DepositReportPage() {
 
     try {
       const headers = activeTab === 'snapshot' 
-        ? ['Customer ID', 'Customer Name', 'Phone', 'Cans in Hand', 'Deposit Balance']
+        ? ['Customer ID', 'Customer Name', 'Phone', 'Deposit Balance']
         : ['Date', 'Time', 'Order Number', 'Customer ID', 'Customer Name', 'Phone', 'Payment Type', 'Amount'];
 
       const excelData = [
@@ -158,11 +159,10 @@ export default function DepositReportPage() {
           c.id ? c.id.slice(-8).toUpperCase() : 'N/A',
           c.name || 'N/A',
           c.phone || 'N/A',
-          c.cansInHand || 0,
           c.depositWalletBalance || 0
         ]) : filteredData.map(tx => [
-          tx.createdAt ? format(new Date(tx.createdAt), 'yyyy-MM-dd') : 'N/A',
-          tx.createdAt ? format(new Date(tx.createdAt), 'hh:mm a') : 'N/A',
+          tx.createdAtISTDateOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'yyyy-MM-dd') : 'N/A'),
+          tx.createdAtISTTimeOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'hh:mm a') : 'N/A'),
           tx.orderNumber || '-',
           tx.customerId ? tx.customerId.slice(-8).toUpperCase() : 'N/A',
           tx.name || 'N/A',
@@ -192,7 +192,6 @@ export default function DepositReportPage() {
         { wch: 15 }, // Customer ID
         { wch: 30 }, // Customer Name
         { wch: 20 }, // Phone
-        { wch: 15 }, // Cans in Hand
         { wch: 20 }  // Deposit Balance
       ] : [
         { wch: 15 }, // Date
@@ -274,14 +273,13 @@ export default function DepositReportPage() {
                       <TableHead className="w-[150px] min-w-[150px] pl-6">Customer ID</TableHead>
                       <TableHead className="w-[250px] min-w-[250px]">Customer</TableHead>
                       <TableHead className="w-[150px] min-w-[150px]">Phone</TableHead>
-                      <TableHead className="w-[150px] min-w-[150px] text-center">Cans in Hand</TableHead>
-                      <TableHead className="w-[150px] min-w-[150px] text-right">Deposit Balance</TableHead>
+                      <TableHead className="w-[150px] min-w-[150px] text-right pr-6">Deposit Balance</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredData.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="h-24 text-center text-gray-500">
+                        <TableCell colSpan={4} className="h-24 text-center text-gray-500">
                           {searchQuery ? 'No customers match your search.' : 'No deposit records found.'}
                         </TableCell>
                       </TableRow>
@@ -291,12 +289,7 @@ export default function DepositReportPage() {
                           <TableCell className="font-mono text-sm pl-6 text-gray-600">{customer.id ? customer.id.slice(-8).toUpperCase() : 'N/A'}</TableCell>
                           <TableCell className="font-medium">{customer.name || 'N/A'}</TableCell>
                           <TableCell>{customer.phone}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge variant={customer.cansInHand > 0 ? "secondary" : "outline"} className="font-mono">
-                              {customer.cansInHand || 0}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell className="text-right font-medium pr-6">
                             ₹{customer.depositWalletBalance || 0}
                           </TableCell>
                         </TableRow>
@@ -443,7 +436,7 @@ export default function DepositReportPage() {
                       <TableHead className="w-[150px] min-w-[150px]">Customer ID</TableHead>
                       <TableHead className="w-[250px] min-w-[250px]">Customer</TableHead>
                       <TableHead className="w-[150px] min-w-[150px]">Payment Type</TableHead>
-                      <TableHead className="w-[150px] min-w-[150px]">Amount</TableHead>
+                      <TableHead className="w-[150px] min-w-[150px] text-right pr-6">Amount</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -460,8 +453,8 @@ export default function DepositReportPage() {
                         <TableRow key={`${tx.transactionId}-${index}`}>
                           <TableCell className="font-medium pl-6">
                             <div className="flex flex-col">
-                              <span>{tx.createdAt ? format(new Date(tx.createdAt), 'MMM dd, yyyy') : 'N/A'}</span>
-                              <span className="text-xs text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), 'hh:mm a') : ''}</span>
+                              <span>{tx.createdAtISTDateOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'MMM dd, yyyy') : 'N/A')}</span>
+                              <span className="text-xs text-muted-foreground">{tx.createdAtISTTimeOnly || (tx.createdAt ? formatInTimeZone(new Date(tx.createdAt), 'Asia/Kolkata', 'hh:mm a') : '')}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-gray-600">
@@ -483,8 +476,8 @@ export default function DepositReportPage() {
                                </Badge>
                             ) : '-'}
                           </TableCell>
-                          <TableCell className="font-medium text-green-600">
-                            + ₹{tx.amount || 0}
+                          <TableCell className="text-right font-medium pr-6">
+                            ₹{tx.amount || 0}
                           </TableCell>
                         </TableRow>
                       ))

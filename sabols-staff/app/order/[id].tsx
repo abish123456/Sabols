@@ -142,6 +142,55 @@ export default function OrderDetailsScreen() {
     }
   };
 
+  const handleUpdateCustomerLocation = async () => {
+    try {
+      setSubmitting(true);
+      let { status: permissionStatus } = await Location.requestForegroundPermissionsAsync();
+      if (permissionStatus !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required to update customer location.');
+        setSubmitting(false);
+        return;
+      }
+      
+      let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      
+      const token = await AsyncStorage.getItem('staffToken');
+      const response = await fetch(`${API_URL}/api/delivery/update-location`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          orderId: order?.id,
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setAlertModalData({
+          visible: true,
+          type: 'success',
+          title: 'Success!',
+          message: 'Customer delivery location has been successfully updated to your current position.',
+          onConfirm: () => {
+            setAlertModalData(prev => ({ ...prev, visible: false }));
+            fetchOrderDetails();
+          }
+        });
+      } else {
+        Alert.alert('Error', data.message || 'Failed to update location');
+      }
+    } catch (error) {
+      console.error("Update location error:", error);
+      Alert.alert('Error', 'Failed to update customer location');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleUpdateStatus = async (status: 'DELIVERED' | 'NOT_DELIVERED', payloadReason?: string) => {
     if (status === 'NOT_DELIVERED') {
       if (!notDeliveredReason && !payloadReason) {
@@ -413,6 +462,41 @@ export default function OrderDetailsScreen() {
               <Text className="text-blue-600 font-bold ml-1.5 text-sm">Maps</Text>
             </TouchableOpacity>
           </View>
+          
+          {/* Update Location Button */}
+          {shiftStatus === 'ACTIVE' && (
+            <TouchableOpacity 
+              className="flex-row items-center justify-between mt-3 bg-blue-50 p-3 rounded-lg border border-blue-200"
+              onPress={() => {
+                setAlertModalData({
+                  visible: true,
+                  type: 'confirm',
+                  title: 'Update Location?',
+                  message: 'This will update the customer\'s permanent delivery location to your current GPS coordinates. Are you sure you want to do this?',
+                  onConfirm: () => {
+                    setAlertModalData(prev => ({ ...prev, visible: false }));
+                    setTimeout(handleUpdateCustomerLocation, 300);
+                  }
+                });
+              }}
+              disabled={submitting}
+            >
+              <View className="flex-row items-center flex-1">
+                <View className="bg-blue-100 p-2 rounded-full mr-3">
+                  <MapPin size={18} color="#2563EB" />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-blue-900 font-bold text-sm">Wrong Location Pin?</Text>
+                  <Text className="text-blue-700 text-xs mt-0.5">Update to your current location</Text>
+                </View>
+              </View>
+              {submitting ? (
+                <ActivityIndicator color="#2563EB" size="small" />
+              ) : (
+                <Text className="text-blue-700 font-bold text-xs uppercase tracking-wider">Fix Pin</Text>
+              )}
+            </TouchableOpacity>
+          )}
 
           {order.address?.contactName ? (
             <TouchableOpacity 
