@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { MapPin, Search, ChevronDown, X } from 'lucide-react-native';
 import MapPicker from './MapPicker';
 import { apiFetch } from '../lib/api';
@@ -103,70 +103,77 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
       : null;
   }, [formData.location?.coordinates]);
 
-  if (showPincodeDropdown) {
-    return (
-      <View className="flex-1 bg-white min-h-[500px] rounded-xl border border-gray-100 overflow-hidden shadow-sm mb-4">
-        <View className="flex-row justify-between items-center p-4 border-b border-gray-100 bg-white">
-          <Text className="text-lg font-black text-black">Select Pincode</Text>
-          <TouchableOpacity onPress={() => setShowPincodeDropdown(false)} className="p-2 bg-gray-100 rounded-full">
-            <X size={20} color="#6b7280" />
-          </TouchableOpacity>
-        </View>
-        <View className="p-4 border-b border-gray-100 bg-white">
-          <View className="flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
-            <Search size={20} color="#9ca3af" className="mr-2" />
-            <TextInput
-              className="flex-1 text-black font-medium text-base"
-              placeholder="Search by pincode or area..."
-              value={searchPincode}
-              onChangeText={setSearchPincode}
-              autoFocus={true}
-              autoComplete="off"
-              autoCorrect={false}
-              importantForAutofill="no"
-              textContentType="none"
-            />
-          </View>
-        </View>
-        <View className="flex-1 bg-gray-50 min-h-[300px]">
-          {serviceAreas.length === 0 ? (
-            <View className="py-12 items-center justify-center">
-              <ActivityIndicator size="large" color="#0ea5e9" />
-              <Text className="text-gray-500 mt-4 font-medium">Loading service areas...</Text>
-            </View>
-          ) : filteredAreas.length === 0 ? (
-            <View className="py-12 items-center justify-center px-6">
-              <View className="w-16 h-16 bg-gray-200 rounded-full items-center justify-center mb-4">
-                <Search size={24} color="#9ca3af" />
-              </View>
-              <Text className="text-lg font-bold text-gray-700 text-center mb-1">No areas found</Text>
-              <Text className="text-gray-500 text-center text-sm">We couldn't find any service area matching "{searchPincode}".</Text>
-            </View>
-          ) : (
-            filteredAreas.map((area) => (
-              <TouchableOpacity
-                key={area.pincode}
-                className="flex-row items-center p-4 border-b border-gray-200 bg-white active:bg-blue-50"
-                onPress={() => handlePincodeSelect(area)}
-              >
-                <View className="w-10 h-10 bg-blue-50 rounded-full items-center justify-center mr-4">
-                  <MapPin size={18} color="#0ea5e9" />
-                </View>
-                <View className="flex-1">
-                  <Text className="font-black text-base text-black mb-0.5">{area.pincode}</Text>
-                  <Text className="text-sm text-gray-500 font-medium">{area.areaName}</Text>
-                </View>
-                <ChevronDown size={20} color="#d1d5db" style={{ transform: [{ rotate: '-90deg' }] }} />
-              </TouchableOpacity>
-            ))
-          )}
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View className="space-y-4 w-full">
+      <Modal
+        visible={showPincodeDropdown}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowPincodeDropdown(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/50"
+        >
+          <View className="bg-white h-[85%] rounded-t-3xl overflow-hidden shadow-xl">
+            <View className="flex-row justify-between items-center p-5 border-b border-gray-100 bg-white">
+              <Text className="text-xl font-black text-black">Select Pincode</Text>
+              <TouchableOpacity onPress={() => setShowPincodeDropdown(false)} className="p-2 bg-gray-100 rounded-full">
+                <X size={20} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+            <View className="p-4 border-b border-gray-100 bg-white">
+              <View className="flex-row items-center bg-gray-100 rounded-2xl px-4 py-3">
+                <Search size={20} color="#9ca3af" style={{ marginRight: 8 }} />
+                <TextInput
+                  className="flex-1 text-black font-medium text-base"
+                  placeholder="Search by pincode or area..."
+                  value={searchPincode}
+                  onChangeText={setSearchPincode}
+                  autoFocus={true}
+                  autoComplete="off"
+                  autoCorrect={false}
+                  importantForAutofill="no"
+                  textContentType="none"
+                />
+              </View>
+            </View>
+            <ScrollView className="flex-1 bg-gray-50" nestedScrollEnabled={true}>
+              {serviceAreas.length === 0 ? (
+                <View className="py-12 items-center justify-center">
+                  <ActivityIndicator size="large" color="#0ea5e9" />
+                  <Text className="text-gray-500 mt-4 font-medium">Loading service areas...</Text>
+                </View>
+              ) : filteredAreas.length === 0 ? (
+                <View className="py-12 items-center justify-center px-6">
+                  <View className="w-16 h-16 bg-gray-200 rounded-full items-center justify-center mb-4">
+                    <Search size={24} color="#9ca3af" />
+                  </View>
+                  <Text className="text-lg font-bold text-gray-700 text-center mb-1">No areas found</Text>
+                  <Text className="text-gray-500 text-center text-sm">We couldn't find any service area matching "{searchPincode}".</Text>
+                </View>
+              ) : (
+                filteredAreas.map((area) => (
+                  <TouchableOpacity
+                    key={area.pincode}
+                    className="flex-row items-center p-4 border-b border-gray-200 bg-white active:bg-blue-50"
+                    onPress={() => handlePincodeSelect(area)}
+                  >
+                    <View className="w-10 h-10 bg-blue-50 rounded-full items-center justify-center mr-4">
+                      <MapPin size={18} color="#0ea5e9" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-black text-base text-black mb-0.5">{area.pincode}</Text>
+                      <Text className="text-sm text-gray-500 font-medium">{area.areaName}</Text>
+                    </View>
+                    <ChevronDown size={20} color="#d1d5db" style={{ transform: [{ rotate: '-90deg' }] }} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
       <View>
         <Text className="text-sm font-semibold text-gray-700 mb-1">Address Nickname (Optional)</Text>
         <TextInput
@@ -257,7 +264,7 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
         <View className="flex-1">
           <Text className="text-sm font-semibold text-gray-700 mb-1">Pincode *</Text>
           <TouchableOpacity
-            className={`bg-white border flex-row items-center justify-between px-3 py-3 rounded-lg ${showPincodeDropdown ? 'border-[#0ea5e9]' : 'border-gray-200'} ${errors?.pincode ? 'border-red-500' : ''}`}
+            className={`bg-white border flex-row items-center justify-between px-3 py-3 rounded-lg ${showPincodeDropdown ? 'border-sky-500' : 'border-gray-200'} ${errors?.pincode ? 'border-red-500' : ''}`}
             onPress={() => setShowPincodeDropdown(!showPincodeDropdown)}
           >
             <Text 
@@ -298,7 +305,7 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
         
         {isGeocoding ? (
           <View className="flex-row items-center mb-2">
-            <ActivityIndicator size="small" color="#0ea5e9" className="mr-2" />
+            <ActivityIndicator size="small" color="#0ea5e9" style={{ marginRight: 8 }} />
             <Text className="text-xs text-gray-500">Detecting address...</Text>
           </View>
         ) : null}
@@ -328,7 +335,7 @@ export default function AddressForm({ formData, onChange, errors, showDefaultTog
           className="flex-row items-center mt-2"
           onPress={() => onChange('isDefault', !formData.isDefault)}
         >
-          <View className={`w-5 h-5 rounded border ${formData.isDefault ? 'bg-[#0ea5e9] border-[#0ea5e9]' : 'border-gray-300 bg-white'} items-center justify-center mr-2`}>
+          <View className={`w-5 h-5 rounded border ${formData.isDefault ? 'bg-sky-500 border-sky-500' : 'border-gray-300 bg-white'} items-center justify-center mr-2`}>
             {formData.isDefault && <Text className="text-white text-xs font-bold">✓</Text>}
           </View>
           <Text className="text-gray-700 font-medium">Set as default address</Text>

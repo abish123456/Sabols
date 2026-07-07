@@ -495,9 +495,9 @@ export default function ProfileScreen() {
                 <TouchableOpacity 
                   key={type} 
                   onPress={() => setRefundMethod(type)}
-                  className={`flex-row items-center p-2 rounded border ${refundMethod === type ? 'border-[#0ea5e9] bg-blue-50' : 'border-gray-200'}`}
+                  className={`flex-row items-center p-2 rounded border ${refundMethod === type ? 'border-sky-500 bg-blue-50' : 'border-gray-200'}`}
                 >
-                  <View className={`w-4 h-4 rounded-full border mr-2 items-center justify-center ${refundMethod === type ? 'border-[#0ea5e9]' : 'border-gray-300'}`}>
+                  <View className={`w-4 h-4 rounded-full border mr-2 items-center justify-center ${refundMethod === type ? 'border-sky-500' : 'border-gray-300'}`}>
                     {refundMethod === type && <View className="w-2 h-2 rounded-full bg-[#0ea5e9]" />}
                   </View>
                   <Text className="capitalize text-sm font-semibold">{type === 'cod' ? 'Cash' : type}</Text>
@@ -593,14 +593,14 @@ export default function ProfileScreen() {
 
       {error ? (
         <View className="bg-red-50 p-3 rounded-md border border-red-200 mb-4 flex-row items-center">
-          <AlertCircle size={20} color="#dc2626" className="mr-2" />
+          <AlertCircle size={20} color="#dc2626" style={{ marginRight: 8 }} />
           <Text className="text-red-700">{error}</Text>
         </View>
       ) : null}
       
       {success ? (
         <View className="bg-green-50 p-3 rounded-md border border-green-200 mb-4 flex-row items-center">
-          <CheckCircle2 size={20} color="#16a34a" className="mr-2" />
+          <CheckCircle2 size={20} color="#16a34a" style={{ marginRight: 8 }} />
           <Text className="text-green-700">{success}</Text>
         </View>
       ) : null}
@@ -680,13 +680,13 @@ export default function ProfileScreen() {
               <Text className="text-sm font-semibold text-gray-700 mb-2">Are you an old customer of Sabols? *</Text>
               <View className="flex-row gap-6 mt-1">
                 <TouchableOpacity onPress={() => setHasExistingDeposit('no')} className="flex-row items-center gap-2">
-                  <View className={`w-5 h-5 rounded-full border items-center justify-center ${hasExistingDeposit === 'no' ? 'border-[#0ea5e9]' : 'border-gray-300'}`}>
+                  <View className={`w-5 h-5 rounded-full border items-center justify-center ${hasExistingDeposit === 'no' ? 'border-sky-500' : 'border-gray-300'}`}>
                     {hasExistingDeposit === 'no' && <View className="w-3 h-3 rounded-full bg-[#0ea5e9]" />}
                   </View>
                   <Text className="text-gray-700">No</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setHasExistingDeposit('yes')} className="flex-row items-center gap-2">
-                  <View className={`w-5 h-5 rounded-full border items-center justify-center ${hasExistingDeposit === 'yes' ? 'border-[#0ea5e9]' : 'border-gray-300'}`}>
+                  <View className={`w-5 h-5 rounded-full border items-center justify-center ${hasExistingDeposit === 'yes' ? 'border-sky-500' : 'border-gray-300'}`}>
                     {hasExistingDeposit === 'yes' && <View className="w-3 h-3 rounded-full bg-[#0ea5e9]" />}
                   </View>
                   <Text className="text-gray-700">Yes</Text>
@@ -710,9 +710,9 @@ export default function ProfileScreen() {
                         <TouchableOpacity 
                           key={p.id} 
                           onPress={() => setSelectedDepositProductId(p.id)}
-                          className={`p-3 border rounded-lg mb-2 ${selectedDepositProductId === p.id ? 'border-[#0ea5e9] bg-blue-50' : 'border-gray-200 bg-white'}`}
+                          className={`p-3 border rounded-lg mb-2 ${selectedDepositProductId === p.id ? 'border-sky-500 bg-blue-50' : 'border-gray-200 bg-white'}`}
                         >
-                          <Text className={`font-medium ${selectedDepositProductId === p.id ? 'text-[#0ea5e9]' : 'text-gray-700'}`}>{p.name}</Text>
+                          <Text className={`font-medium ${selectedDepositProductId === p.id ? 'text-sky-500' : 'text-gray-700'}`}>{p.name}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -778,7 +778,7 @@ export default function ProfileScreen() {
             <TouchableOpacity 
               onPress={handleSave}
               disabled={isSaving}
-              className={`flex-1 py-3 rounded-md items-center flex-row justify-center ${isSaving ? 'bg-sky-300' : 'bg-[#0ea5e9]'}`}
+              className={`flex-1 py-3 rounded-md items-center flex-row justify-center ${isSaving ? 'bg-sky-300' : 'bg-sky-500'}`}
             >
               {isSaving ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save</Text>}
             </TouchableOpacity>
@@ -792,7 +792,7 @@ export default function ProfileScreen() {
             onPress={handleLogout}
             className="bg-red-50 py-3 rounded-xl border border-red-200 items-center flex-row justify-center"
           >
-            <LogOut size={16} color="#ef4444" className="mr-2" />
+            <LogOut size={16} color="#ef4444" style={{ marginRight: 8 }} />
             <Text className="text-red-600 font-bold text-base">Log Out</Text>
           </TouchableOpacity>
         </View>
