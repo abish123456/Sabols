@@ -55,8 +55,10 @@ export async function POST(req: NextRequest) {
       amount: number | null; // Amount in paise, may be null for old orders
       depositAmount: number | null; // Amount in paise
       deliveryDate: Date;
+      paidAmount: number;
     }>(
-      `SELECT o."id", o."orderNumber", o."customerId", o."paymentStatus", o."quantity", o."amount", o."depositAmount", o."deliveryDate"
+      `SELECT o."id", o."orderNumber", o."customerId", o."paymentStatus", o."quantity", o."amount", o."depositAmount", o."deliveryDate",
+         COALESCE((SELECT SUM(p."amount")::bigint FROM "Payment" p WHERE p."orderId" = o."id" AND p."status" = 'SUCCESS'), 0) as "paidAmount"
        FROM "Order" o
        WHERE o."id" = $1 AND o."customerId" = $2`,
       [orderId, customerId]
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const expectedAmount = order.amount;
+    const expectedAmount = order.amount - Number(order.paidAmount);
     const actualAmount = typeof payment.amount === 'number' ? payment.amount : Number(payment.amount) || 0;
 
     if (Math.abs(actualAmount - expectedAmount) > 1) {
@@ -188,45 +190,61 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // 3. Update Customer deposit balance if this order included a deposit
-        if (order.depositAmount && order.depositAmount > 0) {
-          // Check if we already have a PAYMENT log for this order to be idempotent
-          const existingPaymentLog = await client.query(
-            `SELECT 1 FROM "WalletTransaction" 
-               WHERE "referenceId" = $1 AND "referenceType" = 'PAYMENT'`,
-            [orderId]
-          );
 
-          if (existingPaymentLog.rows.length === 0) {
-            const depositInRupees = order.depositAmount / 100;
-
-            // Null-safe relative update
-            await client.query(
-              `UPDATE "Customer" 
-                 SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
-                     "updatedAt" = NOW() 
-                 WHERE "id" = $2`,
-              [depositInRupees, order.customerId]
-            );
-
-            // Log the deposit transaction
-            await client.query(
-              `INSERT INTO "WalletTransaction"
-                 ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-              [
-                crypto.randomUUID(),
-                order.customerId,
-                depositInRupees,
-                'CREDIT',
-                'PAYMENT',
-                orderId,
-                `Online Deposit Payment for Order #${orderId.slice(-8).toUpperCase()}`
-              ]
-            );
-          }
-        }
       });
+    }
+
+    // 3. Sync Customer deposit balance based on total deposit required and total deposit credited
+    if (order.depositAmount && order.depositAmount > 0) {
+      const depositRequiredRupees = order.depositAmount / 100;
+
+      // Find how much deposit has been credited for this order so far from online payments
+      const creditedRes = await query<{ totalCredited: string }>(
+        `SELECT COALESCE(SUM("amount"), 0) as "totalCredited" 
+         FROM "WalletTransaction" 
+         WHERE "referenceId" = $1 
+           AND "type" = 'CREDIT' 
+           AND ("referenceType" = 'PAYMENT' OR "description" ILIKE '%Online Deposit Payment%')`,
+        [orderId]
+      );
+      const totalCredited = parseFloat(creditedRes.rows[0].totalCredited);
+      const shortfall = depositRequiredRupees - totalCredited;
+
+      // Also ensure that the total payments received for this order cover the total expected amount
+      // The deposit shouldn't be fully credited if they haven't paid the full order amount
+      const paymentsRes = await query<{ amount: number }>(
+        `SELECT amount FROM "Payment" WHERE "orderId" = $1 AND "status" = 'SUCCESS'`,
+        [orderId]
+      );
+      const totalPaid = paymentsRes.rows.reduce((sum, p) => sum + Number(p.amount), 0);
+      const totalExpected = Number(order.amount || 0);
+
+      if (shortfall > 0 && totalPaid >= (totalExpected - 1)) {
+        // Null-safe relative update
+        await query(
+          `UPDATE "Customer" 
+             SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
+                 "updatedAt" = NOW() 
+             WHERE "id" = $2`,
+          [shortfall, order.customerId]
+        );
+
+        // Log the deposit transaction
+        await query(
+          `INSERT INTO "WalletTransaction"
+             ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+          [
+            crypto.randomUUID(),
+            order.customerId,
+            shortfall,
+            'CREDIT',
+            'PAYMENT',
+            orderId,
+            `Online Deposit Payment for Order #${(order.orderNumber || orderId.slice(-8)).toUpperCase()}`
+          ]
+        );
+      }
     }
 
     // Safety Net: If order was already successful (e.g. via webhook), 

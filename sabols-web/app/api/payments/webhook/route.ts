@@ -477,6 +477,66 @@ async function processWebhookEvent(event: any) {
         }
       }
 
+      // 3. Sync Customer deposit balance based on total deposit required and total deposit credited
+      // We do this for all successful webhook payments
+      if (orderId) {
+        const orderRes = await query<{ depositAmount: number | null; customerId: string; amount: number | null; orderNumber: string | null }>(
+          `SELECT "depositAmount", "customerId", "amount", "orderNumber" FROM "Order" WHERE "id" = $1`,
+          [orderId]
+        );
+        
+        if (orderRes.rows.length > 0) {
+          const order = orderRes.rows[0];
+          
+          if (order.depositAmount && order.depositAmount > 0) {
+            const depositRequiredRupees = order.depositAmount / 100;
+
+            const creditedRes = await query<{ totalCredited: string }>(
+              `SELECT COALESCE(SUM("amount"), 0) as "totalCredited" 
+               FROM "WalletTransaction" 
+               WHERE "referenceId" = $1 
+                 AND "type" = 'CREDIT' 
+                 AND ("referenceType" = 'PAYMENT' OR "description" ILIKE '%Online Deposit Payment%')`,
+              [orderId]
+            );
+            const totalCredited = parseFloat(creditedRes.rows[0].totalCredited);
+            const shortfall = depositRequiredRupees - totalCredited;
+
+            const paymentsRes = await query<{ amount: number }>(
+              `SELECT amount FROM "Payment" WHERE "orderId" = $1 AND "status" = 'SUCCESS'`,
+              [orderId]
+            );
+            const totalPaid = paymentsRes.rows.reduce((sum, p) => sum + Number(p.amount), 0);
+            const totalExpected = Number(order.amount || 0);
+
+            if (shortfall > 0 && totalPaid >= (totalExpected - 1)) {
+              await query(
+                `UPDATE "Customer" 
+                   SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
+                       "updatedAt" = NOW() 
+                   WHERE "id" = $2`,
+                [shortfall, order.customerId]
+              );
+
+              await query(
+                `INSERT INTO "WalletTransaction"
+                   ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+                [
+                  crypto.randomUUID(),
+                  order.customerId,
+                  shortfall,
+                  'CREDIT',
+                  'PAYMENT',
+                  orderId,
+                  `Online Deposit Payment for Order #${(order.orderNumber || orderId.slice(-8)).toUpperCase()}`
+                ]
+              );
+            }
+          }
+        }
+      }
+
       return NextResponse.json({ success: true });
     }
 

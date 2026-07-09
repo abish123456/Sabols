@@ -62,8 +62,10 @@ export async function POST(req: NextRequest) {
       paymentStatus: string;
       quantity: number;
       amount: number;
+      paidAmount: number;
     }>(
-      `SELECT o."id", o."customerId", o."paymentStatus", o."quantity", o."amount"
+      `SELECT o."id", o."customerId", o."paymentStatus", o."quantity", o."amount",
+         COALESCE((SELECT SUM(p."amount")::bigint FROM "Payment" p WHERE p."orderId" = o."id" AND p."status" = 'SUCCESS'), 0) as "paidAmount"
        FROM "Order" o
        WHERE o."id" = $1 AND o."customerId" = $2`,
       [orderId, customerId]
@@ -78,10 +80,12 @@ export async function POST(req: NextRequest) {
     }
 
     const order = orderRes.rows[0];
-    if (order.paymentStatus !== "PENDING" && order.paymentStatus !== "COD") {
+    const outstandingAmount = order.amount - Number(order.paidAmount);
+
+    if (outstandingAmount <= 0) {
       logger.log({ statusCode: 400 });
       return createSecureResponse(
-        { success: false, message: "Payment already processed" },
+        { success: false, message: "Order is already fully paid" },
         { status: 400 }
       );
     }
@@ -246,7 +250,7 @@ export async function POST(req: NextRequest) {
       : `ord_${orderId}`;
 
     const razorpayOrder = await razorpay.orders.create({
-      amount: order.amount, // Amount in paise (INR) from DB
+      amount: outstandingAmount, // Amount in paise (INR) from DB
       currency: "INR",
       receipt: receipt.substring(0, 40), // Ensure max 40 chars
       notes: {

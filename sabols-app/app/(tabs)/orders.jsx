@@ -36,11 +36,16 @@ const getStatusLabel = (order) => {
   return status.replace(/_/g, ' ');
 };
 
-const canPayNow = (order) =>
-  (order.paymentStatus === 'COD' || order.paymentStatus === 'PENDING') &&
-  order.status !== 'DELIVERED' &&
-  order.status !== 'CANCELLED' &&
-  order.status !== 'NOT_DELIVERED';
+const canPayNow = (order) => {
+  if (order.status === 'DELIVERED' || order.status === 'CANCELLED' || order.status === 'NOT_DELIVERED') {
+    return false;
+  }
+  return (
+    order.paymentStatus === 'COD' || 
+    order.paymentStatus === 'PENDING' || 
+    Math.round(order.amount) > Math.round(order.paidAmount || 0)
+  );
+};
 
 const formatDateIST = (dateString) => {
   if (!dateString) return 'N/A';
@@ -376,10 +381,10 @@ export default function OrdersScreen() {
                     {order.paidAmount > 0 && order.paidAmount < order.amount && (
                       <Text className="text-[10px] text-green-600 font-medium">Paid: ₹{Math.round(Number(order.paidAmount))}</Text>
                     )}
-                    {order.codAdjustmentAmount > 0 && (
+                    {Math.round(order.amount) > Math.round(order.paidAmount || 0) && (order.onlinePaidAmount > 0 || order.paymentMethod === 'ONLINE') && (
                       <View className="mt-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
-                        <Text className="text-[10px] text-amber-700 font-bold">Online: ₹{Math.round(order.onlinePaidAmount || 0)}</Text>
-                        <Text className="text-[10px] text-red-700 font-bold">COD to pay: ₹{Math.round(order.codAdjustmentAmount)}</Text>
+                        <Text className="text-[10px] text-amber-700 font-bold">Online: ₹{Math.round(order.paidAmount || 0)}</Text>
+                        <Text className="text-[10px] text-red-700 font-bold">Remaining to pay: ₹{Math.round(order.amount) - Math.round(order.paidAmount || 0)}</Text>
                       </View>
                     )}
                   </View>
@@ -478,7 +483,7 @@ export default function OrdersScreen() {
                           <>
                             <Wallet size={14} color="white" />
                             <Text className="text-white font-semibold text-sm ml-2">
-                              Pay ₹{Math.round(order.amount)}
+                              Pay ₹{Math.round(order.amount) - Math.round(order.paidAmount || 0)}
                             </Text>
                           </>
                         )}

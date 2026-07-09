@@ -959,21 +959,25 @@ export default function OrdersPage() {
                           Paid: ₹{Math.round(Number(order.paidAmount))}
                         </p>
                       )}
-                      {(order.codAdjustmentAmount || 0) > 0 && (
+                      {Math.round(order.amount) > Math.round(order.paidAmount || 0) && (order.onlinePaidAmount > 0 || order.paymentMethod === 'ONLINE') && (
                         <div className="mt-1 bg-amber-50 border border-amber-200 rounded p-1.5 text-[10px] sm:text-xs space-y-0.5">
                           <div className="flex justify-between gap-3">
                             <span className="text-amber-700">Online Paid</span>
-                            <span className="font-semibold text-green-700">₹{Math.round(order.onlinePaidAmount || 0)}</span>
+                            <span className="font-semibold text-green-700">₹{Math.round(order.paidAmount || 0)}</span>
                           </div>
                           <div className="flex justify-between gap-3">
-                            <span className="text-amber-700">COD to pay</span>
-                            <span className="font-bold text-red-700">₹{Math.round(order.codAdjustmentAmount)}</span>
+                            <span className="text-amber-700">Remaining to pay</span>
+                            <span className="font-bold text-red-700">₹{Math.round(order.amount) - Math.round(order.paidAmount || 0)}</span>
                           </div>
                         </div>
                       )}
                     </div>
 
-                    {(order.paymentStatus === 'COD' || order.paymentStatus === 'PENDING') &&
+                    {(
+                      order.paymentStatus === 'COD' || 
+                      order.paymentStatus === 'PENDING' || 
+                      Math.round(order.amount) > Math.round(order.paidAmount || 0)
+                    ) &&
                       order.status !== 'DELIVERED' &&
                       order.status !== 'CANCELLED' &&
                       order.status !== 'NOT_DELIVERED' && (
@@ -989,7 +993,7 @@ export default function OrdersPage() {
                               Processing
                             </>
                           ) : (
-                            'Pay Now'
+                            `Pay ₹${Math.round(order.amount) - Math.round(order.paidAmount || 0)}`
                           )}
                         </Button>
                       )}

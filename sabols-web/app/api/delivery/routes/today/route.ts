@@ -235,14 +235,12 @@ export async function GET(req: NextRequest) {
           const outstandingAmountInPaise = Math.max(0, orderAmountInPaise - totalPaidInPaise);
 
           let effectivePaymentStatus = row.orderPaymentStatus;
-          if (row.orderAdditionalQuantity && row.orderAdditionalQuantity > 0 && row.orderPaymentStatus !== 'SUCCESS') {
-            if (totalPaidInPaise < orderAmountInPaise - 1) {
-              if (row.orderPaymentStatus === 'SUCCESS') {
-                effectivePaymentStatus = 'PENDING';
-              }
-            } else {
-              effectivePaymentStatus = 'SUCCESS';
+          if (totalPaidInPaise < orderAmountInPaise - 1) {
+            if (row.orderPaymentStatus === 'SUCCESS') {
+              effectivePaymentStatus = 'PENDING';
             }
+          } else {
+            effectivePaymentStatus = 'SUCCESS';
           }
 
           let effectiveCollectedAmount = cashPaidInPaise;

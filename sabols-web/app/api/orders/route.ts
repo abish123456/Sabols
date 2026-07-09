@@ -957,7 +957,7 @@ export async function POST(req: NextRequest) {
 
     if (totalAmountInPaise === 0) {
       paymentStatus = 'SUCCESS';
-      orderStatus = 'CONFIRMED';
+      // orderStatus remains 'PENDING', it will be updated to 'CONFIRMED' by assignOrderToRoute if assignment succeeds
     }
 
     const orderId = crypto.randomUUID();
