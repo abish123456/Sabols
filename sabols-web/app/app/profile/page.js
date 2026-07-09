@@ -33,6 +33,7 @@ import {
   MapPin,
   CreditCard,
   ShoppingBag,
+  ShoppingCart,
   History,
   LogOut,
   ChevronRight,
@@ -251,6 +252,7 @@ function ProfileContent() {
             contactName: data.profile.contactName || '',
             contactPhone: data.profile.contactPhone || '',
             depositWalletBalance: data.profile.depositWalletBalance || 0,
+            orderWalletBalance: data.profile.orderWalletBalance || 0,
             cansInHand: data.profile.cansInHand || 0,
             totalCansCount: data.profile.totalCansCount || 0,
             pendingOrdered: data.profile.pendingOrdered || 0,
@@ -944,6 +946,22 @@ function ProfileContent() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Order Wallet Card - only shown when balance > 0 */}
+                    {(formData.orderWalletBalance || 0) > 0 && (
+                      <div className="bg-green-50 p-4 rounded-2xl border border-green-100 flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 shrink-0">
+                          <ShoppingCart className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-2xl font-black text-green-700">₹{Math.ceil(formData.orderWalletBalance || 0)}</p>
+                          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Order Wallet Balance</p>
+                        </div>
+                        <div className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-lg font-medium">
+                          Used at next order
+                        </div>
+                      </div>
+                    )}
 
                     {/* Menu Options */}
                     <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm">

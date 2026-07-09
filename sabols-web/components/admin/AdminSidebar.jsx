@@ -44,6 +44,7 @@ import {
   Phone,
   FileSearch2,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { SidebarTrigger, useSidebar } from '../ui/sidebar';
@@ -209,6 +210,12 @@ const ALL_MENU_ITEMS = [
         url: '/admin/reports/deposit',
         icon: IndianRupee,
         permission: 'view_deposit_reports'
+      },
+      {
+        title: 'Order Wallet Report',
+        url: '/admin/reports/order-wallet',
+        icon: Wallet,
+        permission: 'view_order_wallet_reports'
       },
       {
         title: 'Product Sales',

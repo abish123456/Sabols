@@ -27,6 +27,7 @@ export default function ProfileScreen() {
   
   const [cansInHand, setCansInHand] = useState(0);
   const [depositWalletBalance, setDepositWalletBalance] = useState(0);
+  const [orderWalletBalance, setOrderWalletBalance] = useState(0);
   const [customerId, setCustomerId] = useState('');
   
   const [showAddressesModal, setShowAddressesModal] = useState(false);
@@ -159,6 +160,7 @@ export default function ProfileScreen() {
             });
             setCansInHand(data.profile.cansInHand || 0);
             setDepositWalletBalance(data.profile.depositWalletBalance || 0);
+            setOrderWalletBalance(data.profile.orderWalletBalance || 0);
             
             const hasBasicInfo = data.profile.name || data.profile.addressLine1 || data.profile.area || data.profile.city || data.profile.pincode;
             
@@ -580,7 +582,17 @@ export default function ProfileScreen() {
             <Text className="text-lg font-bold text-[#0ea5e9]">₹{Math.ceil(depositWalletBalance)}</Text>
             <Text className="text-[9px] uppercase font-bold text-gray-500 text-center">Deposit Paid</Text>
           </View>
-          
+
+          {orderWalletBalance > 0 && (
+            <View className="flex-1 bg-green-50/50 border border-green-100 py-3 px-2 rounded-xl items-center">
+              <View className="w-8 h-8 bg-green-100 rounded-full items-center justify-center mb-1">
+                <ShoppingCart size={16} color="#16a34a" />
+              </View>
+              <Text className="text-lg font-bold text-green-600">₹{Math.ceil(orderWalletBalance)}</Text>
+              <Text className="text-[9px] uppercase font-bold text-gray-500 text-center">Order Wallet</Text>
+            </View>
+          )}
+
           <View className="flex-1 bg-orange-50/50 border border-orange-100 py-3 px-2 rounded-xl items-center">
             <View className="w-8 h-8 bg-orange-100 rounded-full items-center justify-center mb-1">
               <ShoppingBag size={16} color="#ea580c" />

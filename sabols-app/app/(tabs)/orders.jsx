@@ -376,6 +376,12 @@ export default function OrdersScreen() {
                     {order.paidAmount > 0 && order.paidAmount < order.amount && (
                       <Text className="text-[10px] text-green-600 font-medium">Paid: ₹{Math.round(Number(order.paidAmount))}</Text>
                     )}
+                    {order.codAdjustmentAmount > 0 && (
+                      <View className="mt-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                        <Text className="text-[10px] text-amber-700 font-bold">Online: ₹{Math.round(order.onlinePaidAmount || 0)}</Text>
+                        <Text className="text-[10px] text-red-700 font-bold">COD to pay: ₹{Math.round(order.codAdjustmentAmount)}</Text>
+                      </View>
+                    )}
                   </View>
                   <View>
                     <Text className="text-gray-500 text-xs mb-0.5">Payment</Text>

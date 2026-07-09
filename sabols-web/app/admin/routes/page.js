@@ -1348,8 +1348,13 @@ export default function RoutesPage() {
                                   </div>
                                 )}
                               </div>
-                              <div className="text-[13px] font-medium text-slate-500">
+                              <div className="text-[13px] font-medium text-slate-500 flex items-center gap-2 flex-wrap">
                                 Qty: <span className="text-slate-900">{totalQty}</span> | <span className="font-bold text-slate-900">₹{Math.ceil(Number(order.amount))}</span>
+                                {(order.codAdjustmentAmount || 0) > 0 && (
+                                  <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                    +₹{Math.round(order.codAdjustmentAmount)} COD
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </TableCell>

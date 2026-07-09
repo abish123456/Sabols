@@ -151,22 +151,84 @@ export async function PATCH(
     // Cancel only if not already delivered/cancelled/not delivered
     const cancellableStatuses = ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY"];
 
-    const updateRes = await query<{ status: string }>(
-      `UPDATE "Order"
-         SET "status" = 'CANCELLED', "updatedAt" = NOW()
-       WHERE "id" = $1
-         AND "customerId" = $2
-         AND "status" = ANY($3)
-       RETURNING "status"`,
-      [id, customerId, cancellableStatuses],
+    const orderRes = await query<{
+      id: string;
+      orderNumber: string;
+      status: string;
+      paymentStatus: string;
+      paymentMethod: string;
+      amount: number;
+      depositAmount: number;
+    }>(
+      `SELECT "id", "orderNumber", "status", "paymentStatus", "paymentMethod", "amount", "depositAmount"
+       FROM "Order"
+       WHERE "id" = $1 AND "customerId" = $2 AND "status" = ANY($3)`,
+      [id, customerId, cancellableStatuses]
     );
 
-    if (updateRes.rowCount === 0) {
+    if (orderRes.rows.length === 0) {
       return NextResponse.json(
         { success: false, message: "Order cannot be cancelled" },
         { status: 400 },
       );
     }
+
+    const order = orderRes.rows[0];
+
+    // Import withTransaction from lib/db
+    const { withTransaction } = await import("../../../../lib/db");
+    
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE "Order" SET "status" = 'CANCELLED', "updatedAt" = NOW() WHERE "id" = $1`,
+        [order.id]
+      );
+
+      // Refund Deposit Wallet (if any deposit was paid via wallet)
+      const depositTxRes = await client.query<{ amount: number }>(
+        `SELECT "amount" FROM "WalletTransaction"
+         WHERE "referenceId" = $1 AND "type" = 'DEBIT' AND "referenceType" = 'DEPOSIT'`,
+        [order.id]
+      );
+      if (depositTxRes.rows.length > 0) {
+        const depositRefund = Math.abs(depositTxRes.rows[0].amount);
+        await client.query(
+          `UPDATE "Customer" SET "depositWalletBalance" = "depositWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
+          [depositRefund, customerId]
+        );
+        await client.query(
+          `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+           VALUES ($1, $2, $3, 'CREDIT', 'DEPOSIT', 'ORDER_CANCELLED', $4, $5, NOW())`,
+          [crypto.randomUUID(), customerId, depositRefund, order.id, `Deposit reversal for Cancelled Order #${order.id.slice(-8).toUpperCase()}`]
+        );
+      }
+
+      // Refund Order Wallet (if any amount was paid via order wallet or online)
+      const orderTxRes = await client.query<{ amount: number }>(
+        `SELECT SUM("amount") as total_amount FROM "WalletTransaction"
+         WHERE "referenceId" = $1 AND "type" = 'DEBIT' AND "walletType" = 'ORDER'`,
+        [order.id]
+      );
+      let orderWalletRefund = orderTxRes.rows[0]?.total_amount ? Math.abs(orderTxRes.rows[0].total_amount) : 0;
+      
+      // If paid ONLINE, also refund the product amount to the Order Wallet
+      if (order.paymentStatus === 'SUCCESS' && order.paymentMethod === 'ONLINE') {
+        const productAmountPaise = Math.max(0, (order.amount || 0) - (order.depositAmount || 0));
+        orderWalletRefund += (productAmountPaise / 100);
+      }
+
+      if (orderWalletRefund > 0) {
+        await client.query(
+          `UPDATE "Customer" SET "orderWalletBalance" = "orderWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
+          [orderWalletRefund, customerId]
+        );
+        await client.query(
+          `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+           VALUES ($1, $2, $3, 'CREDIT', 'ORDER', 'ORDER_CANCELLED', $4, $5, NOW())`,
+          [crypto.randomUUID(), customerId, orderWalletRefund, order.id, `Order Wallet credit for Cancelled Order #${(order.orderNumber || order.id.slice(-8)).toUpperCase()}`]
+        );
+      }
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

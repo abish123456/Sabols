@@ -314,6 +314,7 @@ export default function OrderScreen() {
   const [dateError, setDateError] = useState('');
   const [pendingReturns, setPendingReturns] = useState(0);
   const [error, setError] = useState('');
+  const [useOrderWallet, setUseOrderWallet] = useState(true);
 
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -625,6 +626,7 @@ export default function OrderScreen() {
         contactPhone: addr?.contactPhone || null,
         latitude: addr?.latitude || null,
         longitude: addr?.longitude || null,
+        useOrderWallet,
       };
 
       const res = await apiFetch('/api/orders', { method: 'POST', body: JSON.stringify(payload) });
@@ -718,7 +720,10 @@ export default function OrderScreen() {
   const subtotal = calculateSubtotal();
   const gst = calculateGST();
   const depositInfo = calculateDeposit();
-  const total = subtotal + gst + depositInfo.toPay;
+  const grossTotal = subtotal + gst + depositInfo.toPay;
+  const orderWalletAvailable = customer?.orderWalletBalance || 0;
+  const orderWalletApplied = useOrderWallet ? Math.min(orderWalletAvailable, grossTotal) : 0;
+  const total = grossTotal - orderWalletApplied;
   const selectedAddress = addresses.find(a => a.id === selectedAddressId);
 
   return (
@@ -773,14 +778,17 @@ export default function OrderScreen() {
       {/* ── ORDER SUMMARY ────────────────────────────────────────────────────── */}
       <OrderSummary
         cart={cart}
+        customer={customer}
         slot={deliverySlot}
-        onSlotChange={(slot) => { setDeliverySlot(slot); setDateError(''); }}
+        onSlotChange={(s) => { setDeliverySlot(s); setDateError(''); }}
         slotError={dateError}
         subtotal={subtotal}
         gst={gst}
-        depositInfo={depositInfo}
         total={total}
+        depositInfo={depositInfo}
         pendingReturns={pendingReturns}
+        useOrderWallet={useOrderWallet}
+        setUseOrderWallet={setUseOrderWallet}
       />
 
       <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e5e7eb', padding: 16, marginBottom: 16 }}>

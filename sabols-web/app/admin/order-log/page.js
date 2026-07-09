@@ -8,7 +8,7 @@ import {
   Search, Loader2, Package, User, Phone, MapPin, CreditCard,
   Clock, CheckCircle2, XCircle, AlertTriangle, Truck, Route,
   Link2, Wallet, RefreshCw, Calendar as CalendarIcon, IndianRupee, Info,
-  ChevronDown, ChevronUp, Hash, ChevronLeft, ChevronRight
+  ChevronDown, ChevronUp, Hash, ChevronLeft, ChevronRight, ShoppingCart, Edit3, MapPinIcon
 } from 'lucide-react';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
@@ -65,6 +65,8 @@ const EVENT_CONFIG = {
   DEPOSIT_CREDITED:     { icon: Wallet,       color: 'bg-teal-500',   label: 'Deposit' },
   DEPOSIT_DEBITED:      { icon: Wallet,       color: 'bg-amber-500',  label: 'Deposit' },
   CANCELLED:            { icon: XCircle,      color: 'bg-red-600',    label: 'Cancelled' },
+  ITEMS_EDITED:         { icon: ShoppingCart, color: 'bg-blue-600',   label: 'Items Edited' },
+  ADDRESS_UPDATED:      { icon: MapPin,       color: 'bg-cyan-600',   label: 'Address Updated' },
 };
 
 function TimelineEvent({ event, isLast }) {

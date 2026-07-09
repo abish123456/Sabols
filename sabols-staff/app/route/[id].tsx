@@ -503,7 +503,12 @@ export default function RouteScreen() {
             <Package size={20} color="#6B7280" />
             <Text className="text-gray-600 ml-1.5 font-medium text-lg">{item.quantity || 0} Items</Text>
           </View>
-          <View className="flex-row items-center">
+          <View className="flex-row items-center gap-2">
+            {(item.codAdjustmentAmount || item.codToCollect || 0) > 0 && (item.paymentMethod === 'ONLINE' || item.paymentStatus === 'SUCCESS') && (
+              <View className="bg-amber-100 border border-amber-300 rounded px-1.5 py-0.5">
+                <Text className="text-amber-800 font-bold text-xs">+₹{Math.round(item.codAdjustmentAmount || item.codToCollect || 0)} COD</Text>
+              </View>
+            )}
             <Text className="text-blue-600 font-bold text-xl mr-1">₹{Math.round(Number(item.amount || item.order?.totalAmount || 0))}</Text>
             <ChevronRight size={16} color="#9CA3AF" />
           </View>

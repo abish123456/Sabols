@@ -504,7 +504,10 @@ export default function CartPage() {
   const subtotal = calculateSubtotal();
   const gst = calculateGST();
   const depositInfo = calculateDeposit();
-  const total = calculateTotal(subtotal, gst, depositInfo.toPay);
+  const grossTotal = calculateTotal(subtotal, gst, depositInfo.toPay);
+  const orderWalletAvailable = customer?.orderWalletBalance || 0;
+  const orderWalletApplied = Math.min(orderWalletAvailable, grossTotal);
+  const total = grossTotal - orderWalletApplied;
   const totalQuantity = getTotalQuantity();
 
   return (
@@ -776,7 +779,15 @@ export default function CartPage() {
                       </p>
                     </div>
                   )}
-                  <div className="flex justify-between text-base sm:text-lg font-bold  border-t pt-3">
+
+                  {orderWalletApplied > 0 && (
+                    <div className="flex justify-between text-sm sm:text-base bg-green-50 p-2 rounded border border-green-100">
+                      <span className="font-medium text-green-700">Order Wallet Applied</span>
+                      <span className="font-semibold text-green-700">-₹{orderWalletApplied.toFixed(2)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between text-base sm:text-lg font-bold border-t pt-3">
                     <span>Total</span>
                     <span className="text-black">₹{Math.round(total)}</span>
                   </div>

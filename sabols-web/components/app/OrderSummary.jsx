@@ -14,7 +14,10 @@ export function calculateTotal(cart) {
   }, 0);
 }
 
-export default function OrderSummary({ cart, slot, onSlotChange, slotError, paymentType, subtotal: propSubtotal, gst: propGst, depositInfo }) {
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
+
+export default function OrderSummary({ cart, slot, onSlotChange, slotError, paymentType, subtotal: propSubtotal, gst: propGst, depositInfo, customer, useOrderWallet, setUseOrderWallet }) {
   const [isEditingDate, setIsEditingDate] = useState(false);
   const itemTotal = propSubtotal ?? calculateTotal(cart || []);
   const totalQuantity = cart?.reduce((sum, item) => {
@@ -27,6 +30,9 @@ export default function OrderSummary({ cart, slot, onSlotChange, slotError, paym
   const gst = propGst ?? (itemTotal * 0.05);
   const netDeposit = depositInfo?.toPay || 0;
   const grandTotal = itemTotal + gst + netDeposit;
+  const orderWalletAvailable = customer?.orderWalletBalance || 0;
+  const orderWalletApplied = useOrderWallet ? Math.min(orderWalletAvailable, grandTotal) : 0;
+  const finalTotalToPay = grandTotal - orderWalletApplied;
 
   const getFormattedDate = (dateStr) => {
     if (!dateStr) return '-';
@@ -114,9 +120,31 @@ export default function OrderSummary({ cart, slot, onSlotChange, slotError, paym
             </div>
           )}
 
+          {orderWalletAvailable > 0 && (
+            <div className="border-t pt-3 flex justify-between items-center pb-2 border-primary/20">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="use-wallet" className="text-sm font-semibold cursor-pointer">
+                  Use Order Wallet Balance (₹{orderWalletAvailable.toFixed(2)})
+                </Label>
+              </div>
+              <Checkbox
+                id="use-wallet"
+                checked={useOrderWallet}
+                onCheckedChange={setUseOrderWallet}
+              />
+            </div>
+          )}
+
+          {orderWalletApplied > 0 && (
+            <div className="flex justify-between text-sm text-green-600 font-medium">
+              <span>Order Wallet Applied</span>
+              <span>-₹{orderWalletApplied.toFixed(2)}</span>
+            </div>
+          )}
+
           <div className="border-t pt-3 flex justify-between items-baseline pb-2">
             <span className="text-base font-bold">Total Amount</span>
-            <span className="text-xl font-black text-black">₹{Math.round(grandTotal)}</span>
+            <span className="text-xl font-black text-black">₹{Math.round(finalTotalToPay)}</span>
           </div>
 
           <div className="border-t pt-4 space-y-3">

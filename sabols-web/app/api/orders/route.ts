@@ -85,7 +85,8 @@ export async function GET(req: NextRequest) {
       quantity: number;
       originalQuantity: number | null;
       additionalQuantity: number | null;
-      amount: number | null; // Amount in paise, may be null for old orders
+      amount: number | null;
+      codAdjustmentAmount: number | null;
       deliveryDate: Date;
       deliverySlot: string;
       status: string;
@@ -109,6 +110,7 @@ export async function GET(req: NextRequest) {
         o."originalQuantity",
         o."additionalQuantity",
         o."amount",
+        o."codAdjustmentAmount",
         o."deliveryDate",
         o."deliverySlot",
         o."status",
@@ -199,6 +201,8 @@ export async function GET(req: NextRequest) {
         paymentStatus: order.paymentStatus,
         paymentMethod: order.paymentMethod,
         amount: amountInRupees,
+        codAdjustmentAmount: order.codAdjustmentAmount ? order.codAdjustmentAmount / 100 : 0,
+        onlinePaidAmount: order.paymentMethod === 'ONLINE' ? Math.max(0, amountInRupees - (order.codAdjustmentAmount ? order.codAdjustmentAmount / 100 : 0)) : 0,
         createdAt: createdAtISO,
         updatedAt: updatedAtISO,
         createdAtIST: createdAtIST,
@@ -277,6 +281,7 @@ export async function POST(req: NextRequest) {
     const landmark = body?.landmark?.toString().trim() || null;
     const latitude = body?.latitude ? parseFloat(body.latitude) : null;
     const longitude = body?.longitude ? parseFloat(body.longitude) : null;
+    const useOrderWallet = body?.useOrderWallet === true;
     const hasAddressOverride = !addressId && !!(addressLine1 || area || city || pincode || landmark || addressLine2 || latitude || longitude);
 
     // Validate contact phonet for new address or override
@@ -327,9 +332,10 @@ export async function POST(req: NextRequest) {
       id: string;
       name: string;
       depositWalletBalance: number;
+      orderWalletBalance: number;
       cansInHand: number;
     }>(
-      `SELECT "id", "name", "depositWalletBalance", "cansInHand"
+      `SELECT "id", "name", "depositWalletBalance", "orderWalletBalance", "cansInHand"
        FROM "Customer"
        WHERE "id" = $1`,
       [customerId],
@@ -622,8 +628,14 @@ export async function POST(req: NextRequest) {
     // - cansInHand is adjusted only on delivery, based on actual delivered vs returned cans.
     const walletDelta = 0;
     const cansDelta = 0;
-    const totalAmount = Math.round(subtotal + totalGstAmount + depositToPay);
-
+    
+    // Calculate gross amount before order wallet
+    const grossAmount = Math.round(subtotal + totalGstAmount + depositToPay);
+    
+    // Apply Order Wallet if requested
+    const orderWalletAvailable = customer.orderWalletBalance || 0;
+    const orderWalletApplied = useOrderWallet ? Math.min(orderWalletAvailable, grossAmount) : 0;
+    const totalAmount = grossAmount - orderWalletApplied;
 
     // Verify total quantity matches
     const totalCartQuantity = cartRes.rows.reduce((sum, item) => sum + item.quantity, 0);
@@ -939,9 +951,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Map to enum values used in schema
-    const paymentMethod = paymentType === 'COD' ? 'COD' : 'ONLINE'; // matches PaymentMethod enum: ONLINE or COD
-    const paymentStatus = paymentType === 'COD' ? 'COD' : 'PENDING'; // PaymentStatus enum: PENDING or COD
-    const orderStatus = 'PENDING'; // All orders start as PENDING, confirmed on assignment or payment success.
+    let paymentMethod = paymentType === 'COD' ? 'COD' : 'ONLINE'; // matches PaymentMethod enum: ONLINE or COD
+    let paymentStatus = paymentType === 'COD' ? 'COD' : 'PENDING'; // PaymentStatus enum: PENDING or COD
+    let orderStatus = 'PENDING'; // All orders start as PENDING, confirmed on assignment or payment success.
+
+    if (totalAmountInPaise === 0) {
+      paymentStatus = 'SUCCESS';
+      orderStatus = 'CONFIRMED';
+    }
 
     const orderId = crypto.randomUUID();
     let orderNumber: string | null = null;
@@ -1018,7 +1035,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 4. Update Customer Wallet and Cans In Hand
+      // 4. Update Customer Deposit Wallet and Cans In Hand
       await client.query(
         `UPDATE "Customer"
          SET "depositWalletBalance" = "depositWalletBalance" + $1, 
@@ -1027,6 +1044,31 @@ export async function POST(req: NextRequest) {
          WHERE "id" = $4`,
         [walletDelta, cansDelta, now, customer.id]
       );
+
+      // 4b. Update Customer Order Wallet and Log it
+      if (orderWalletApplied > 0) {
+        await client.query(
+          `UPDATE "Customer"
+           SET "orderWalletBalance" = "orderWalletBalance" - $1,
+               "updatedAt" = $2
+           WHERE "id" = $3`,
+          [orderWalletApplied, now, customer.id]
+        );
+
+        await client.query(
+          `INSERT INTO "WalletTransaction"
+           ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+           VALUES ($1, $2, $3, 'DEBIT', 'ORDER', 'ORDER', $4, $5, $6)`,
+          [
+            crypto.randomUUID(),
+            customer.id,
+            orderWalletApplied,
+            orderId,
+            `Used order wallet balance for Order #${orderNumber}`,
+            now
+          ]
+        );
+      }
 
       // 5. Update Return Requests status
       if (pendingReturnRequestIds.length > 0) {
@@ -1080,8 +1122,8 @@ export async function POST(req: NextRequest) {
       description: `Customer placed order #${orderNumber} for ${quantity} items`,
     });
 
-    // If COD, run auto-assignment logic after logging creation
-    if (paymentType === 'COD') {
+    // If COD or fully paid via wallet (0 amount), run auto-assignment logic after logging creation
+    if (paymentType === 'COD' || totalAmountInPaise === 0) {
       try {
         await assignOrderToRoute(orderId);
       } catch (err) {

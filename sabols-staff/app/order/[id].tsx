@@ -572,7 +572,26 @@ export default function OrderDetailsScreen() {
             <Text className="text-gray-600 text-base">Total Amount</Text>
             <Text className="font-bold text-gray-900 text-xl">₹{Math.round(Number(order.amount || order.order?.totalAmount || 0))}</Text>
           </View>
-          
+
+          {/* COD breakdown when admin edited an online order */}
+          {(order.codAdjustmentAmount || 0) > 0 && (
+            <View className="mb-3 pb-3 border-b border-gray-100 bg-amber-50 rounded-xl p-3">
+              <Text className="text-amber-800 font-bold text-sm mb-2">⚠️ Payment Breakdown (Order Edited)</Text>
+              <View className="flex-row justify-between mb-1">
+                <Text className="text-gray-600 text-sm">Online Paid</Text>
+                <Text className="font-semibold text-green-700 text-sm">₹{Math.round(order.onlinePaidAmount || 0)}</Text>
+              </View>
+              <View className="flex-row justify-between mb-1">
+                <Text className="text-gray-600 text-sm">Extra COD to Collect</Text>
+                <Text className="font-bold text-red-700 text-base">₹{Math.round(order.codAdjustmentAmount || 0)}</Text>
+              </View>
+              <View className="flex-row justify-between border-t border-amber-200 mt-1 pt-1">
+                <Text className="text-gray-700 text-sm font-medium">Total</Text>
+                <Text className="font-bold text-gray-900 text-sm">₹{Math.round(Number(order.amount || 0))}</Text>
+              </View>
+            </View>
+          )}
+
           <View className="flex-row justify-between">
             <Text className="text-gray-600 text-base">Payment Method</Text>
             <Text className={`text-base font-bold ${isCOD ? 'text-orange-600' : 'text-green-600'}`}>

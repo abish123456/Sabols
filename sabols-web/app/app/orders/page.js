@@ -959,6 +959,18 @@ export default function OrdersPage() {
                           Paid: ₹{Math.round(Number(order.paidAmount))}
                         </p>
                       )}
+                      {(order.codAdjustmentAmount || 0) > 0 && (
+                        <div className="mt-1 bg-amber-50 border border-amber-200 rounded p-1.5 text-[10px] sm:text-xs space-y-0.5">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-amber-700">Online Paid</span>
+                            <span className="font-semibold text-green-700">₹{Math.round(order.onlinePaidAmount || 0)}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-amber-700">COD to pay</span>
+                            <span className="font-bold text-red-700">₹{Math.round(order.codAdjustmentAmount)}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {(order.paymentStatus === 'COD' || order.paymentStatus === 'PENDING') &&

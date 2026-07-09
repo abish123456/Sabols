@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../lib/config';
+import Constants from 'expo-constants';
 
 /**
  * usePushNotifications hook for staff.

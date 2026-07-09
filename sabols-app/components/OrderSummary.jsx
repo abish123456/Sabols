@@ -1,8 +1,8 @@
-import { View, Text } from 'react-native';
+import { View, Text, Switch } from 'react-native';
 import { Package, CheckCircle2 } from 'lucide-react-native';
 import DeliverySlotSelector from './DeliverySlotSelector';
 
-export default function OrderSummary({ cart, slot, onSlotChange, slotError, subtotal, gst, total, depositInfo, pendingReturns = 0 }) {
+export default function OrderSummary({ cart, customer, slot, onSlotChange, slotError, subtotal, gst, total, depositInfo, pendingReturns = 0, useOrderWallet, setUseOrderWallet }) {
   const hasDepositProducts = cart.some(item => (item.depositAmount || 0) > 0);
 
   return (
@@ -80,6 +80,28 @@ export default function OrderSummary({ cart, slot, onSlotChange, slotError, subt
               <CheckCircle2 size={12} color="#2563eb" className="mr-1" />
               <Text className="text-[10px] text-blue-600 italic">20L Can balance adjusted for this order</Text>
             </View>
+          </View>
+        )}
+
+        {(customer?.orderWalletBalance || 0) > 0 && (
+          <View className="flex-row justify-between items-center mb-2 mt-2 pt-2 border-t border-gray-100">
+            <View>
+              <Text className="text-black font-semibold">Use Order Wallet Balance</Text>
+              <Text className="text-xs text-gray-500">Available: ₹{(customer.orderWalletBalance).toFixed(2)}</Text>
+            </View>
+            <Switch
+              value={useOrderWallet}
+              onValueChange={setUseOrderWallet}
+              trackColor={{ false: "#d1d5db", true: "#0ea5e9" }}
+              thumbColor={useOrderWallet ? "#fff" : "#f3f4f6"}
+            />
+          </View>
+        )}
+
+        {useOrderWallet && (customer?.orderWalletBalance || 0) > 0 && Math.min(customer.orderWalletBalance, subtotal + gst + (depositInfo?.toPay || 0)) > 0 && (
+          <View className="flex-row justify-between mb-2 mt-2 bg-green-50 p-2 rounded border border-green-100">
+            <Text className="text-green-700 font-medium">Order Wallet Applied</Text>
+            <Text className="text-green-700 font-semibold">-₹{Math.min(customer.orderWalletBalance, subtotal + gst + (depositInfo?.toPay || 0)).toFixed(2)}</Text>
           </View>
         )}
 
