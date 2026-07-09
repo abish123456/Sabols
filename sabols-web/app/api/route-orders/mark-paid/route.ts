@@ -101,43 +101,48 @@ export async function POST(req: NextRequest) {
             [now, routeOrderId]
         );
 
-        // Update Customer deposit balance if this order included a deposit
-        if (depositAmount && depositAmount > 0) {
-            // Check for existing PAYMENT log
-            const existingPaymentLog = await query(
-                `SELECT 1 FROM "WalletTransaction" 
-                 WHERE "referenceId" = $1 AND "referenceType" = 'PAYMENT'`,
-                [orderId]
+        // 4. Sync Customer deposit balance for any deposit paid via COD
+        const orderRes = await query<{ depositAmount: number | null; customerId: string; amount: number | null; orderNumber: string | null }>(
+          `SELECT "depositAmount", "customerId", "amount", "orderNumber" FROM "Order" WHERE "id" = $1`,
+          [orderId]
+        );
+        
+        if (orderRes.rows.length > 0 && orderRes.rows[0].depositAmount && orderRes.rows[0].depositAmount > 0) {
+          const depositRequiredRupees = orderRes.rows[0].depositAmount / 100;
+          
+          const creditedRes = await query<{ totalCredited: string }>(
+            `SELECT COALESCE(SUM("amount"), 0) as "totalCredited" 
+             FROM "WalletTransaction" 
+             WHERE "referenceId" = $1 
+               AND "type" = 'CREDIT' 
+               AND ("referenceType" = 'PAYMENT' OR "description" ILIKE '%Deposit Payment%')`,
+            [orderId]
+          );
+          const totalCredited = parseFloat(creditedRes.rows[0].totalCredited);
+          const shortfall = depositRequiredRupees - totalCredited;
+
+          if (shortfall > 0) {
+            await query(
+              `UPDATE "Customer" 
+                 SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
+                     "updatedAt" = NOW() 
+                 WHERE "id" = $2`,
+              [shortfall, orderRes.rows[0].customerId]
             );
 
-            if (existingPaymentLog.rows.length === 0) {
-                const depositInRupees = depositAmount / 100;
-
-                // Add deposit to wallet (refundable amount)
-                await query(
-                    `UPDATE "Customer" 
-                     SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
-                         "updatedAt" = NOW() 
-                     WHERE "id" = $2`,
-                    [depositInRupees, customerId]
-                );
-
-                // Log the deposit transaction
-                await query(
-                    `INSERT INTO "WalletTransaction"
-                     ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-                    [
-                        crypto.randomUUID(),
-                        customerId,
-                        depositInRupees,
-                        'CREDIT',
-                        'PAYMENT',
-                        orderId,
-                        `Deposit paid (COD) for Order #${orderId.slice(-8).toUpperCase()}`
-                    ]
-                );
-            }
+            await query(
+              `INSERT INTO "WalletTransaction"
+                 ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
+                 VALUES ($1, $2, $3, 'CREDIT', 'PAYMENT', $4, $5, NOW())`,
+              [
+                crypto.randomUUID(),
+                orderRes.rows[0].customerId,
+                shortfall,
+                orderId,
+                `Cash Deposit Payment for Order #${(orderRes.rows[0].orderNumber || orderId.slice(-8)).toUpperCase()}`
+              ]
+            );
+          }
         }
 
         return NextResponse.json({

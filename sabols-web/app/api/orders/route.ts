@@ -1068,6 +1068,34 @@ export async function POST(req: NextRequest) {
             now
           ]
         );
+
+        // 4c. If the order wallet covered part or all of the deposit, credit the deposit wallet
+        const productGrossAmount = Math.round(subtotal + totalGstAmount);
+        const depositPaidByOrderWallet = Math.max(0, orderWalletApplied - productGrossAmount);
+        
+        if (depositPaidByOrderWallet > 0) {
+          await client.query(
+            `UPDATE "Customer"
+             SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1,
+                 "updatedAt" = $2
+             WHERE "id" = $3`,
+            [depositPaidByOrderWallet, now, customer.id]
+          );
+
+          await client.query(
+            `INSERT INTO "WalletTransaction"
+             ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
+             VALUES ($1, $2, $3, 'CREDIT', 'PAYMENT', $4, $5, $6)`,
+            [
+              crypto.randomUUID(),
+              customer.id,
+              depositPaidByOrderWallet,
+              orderId,
+              `Online Deposit Payment for Order #${orderNumber} (via Order Wallet)`,
+              now
+            ]
+          );
+        }
       }
 
       // 5. Update Return Requests status

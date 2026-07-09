@@ -231,14 +231,53 @@ export async function POST(req: NextRequest) {
           entity: 'ORDER',
           entityId: orderId,
           action: 'UPDATE',
-          newData: {
-            status: 'DELIVERED',
-            codCollected,
-            totalDelivered,
-            totalActualReturned
-          },
-          description: `Order successfully delivered by ${deliveryBoyName || 'Delivery Staff'}.`
+          newData: { status: 'DELIVERED', deliveryStatus, codCollected },
+          description: `Order marked as Delivered via Route ${routeOrderId.slice(-8)}`
         });
+
+        // 7. Sync Customer deposit balance for any deposit paid via COD
+        const orderInfoRes = await client.query(
+          `SELECT "depositAmount" FROM "Order" WHERE "id" = $1`,
+          [orderId]
+        );
+        if (orderInfoRes.rows.length > 0 && orderInfoRes.rows[0].depositAmount && orderInfoRes.rows[0].depositAmount > 0) {
+          const depositRequiredRupees = orderInfoRes.rows[0].depositAmount / 100;
+          
+          const creditedRes = await client.query(
+            `SELECT COALESCE(SUM("amount"), 0) as "totalCredited" 
+             FROM "WalletTransaction" 
+             WHERE "referenceId" = $1 
+               AND "type" = 'CREDIT' 
+               AND ("referenceType" = 'PAYMENT' OR "description" ILIKE '%Deposit Payment%')`,
+            [orderId]
+          );
+          const totalCredited = parseFloat(creditedRes.rows[0].totalCredited);
+          const shortfall = depositRequiredRupees - totalCredited;
+
+          // If the order is delivered, it means they've paid everything they owe for it (including COD).
+          if (shortfall > 0) {
+            await client.query(
+              `UPDATE "Customer" 
+                 SET "depositWalletBalance" = COALESCE("depositWalletBalance", 0) + $1, 
+                     "updatedAt" = NOW() 
+                 WHERE "id" = $2`,
+              [shortfall, customerId]
+            );
+
+            await client.query(
+              `INSERT INTO "WalletTransaction"
+                 ("id", "customerId", "amount", "type", "referenceType", "referenceId", "description", "createdAt")
+                 VALUES ($1, $2, $3, 'CREDIT', 'PAYMENT', $4, $5, NOW())`,
+              [
+                crypto.randomUUID(),
+                customerId,
+                shortfall,
+                orderId,
+                `Cash Deposit Payment for Order #${orderId.slice(-8).toUpperCase()}`
+              ]
+            );
+          }
+        }
 
       } else if (deliveryStatus === "NOT_DELIVERED") {
         // NOT_DELIVERED: Only update RouteOrder and Order status.
