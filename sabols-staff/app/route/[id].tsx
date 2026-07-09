@@ -261,6 +261,7 @@ export default function RouteScreen() {
           setIsPollingPayment(false);
           setShowCODModal(false);
           setCodPaymentLinkData(null);
+          fetchRoute(); // Refresh data so UI updates to show "Delivered" button
           // Mark as delivered automatically
           handleUpdateStatus(orderIdToPoll, 'DELIVERED');
         }
@@ -344,6 +345,7 @@ export default function RouteScreen() {
       const data = await res.json();
       if (res.ok && data.success) {
         setShowCODModal(false);
+        fetchRoute(); // Refresh data so UI updates to show "Delivered" button
         handleUpdateStatus(selectedOrderId, 'DELIVERED');
       } else {
         Alert.alert("Error", data.message || "Failed to mark as paid");
@@ -537,7 +539,7 @@ export default function RouteScreen() {
               <Text className="text-red-600 font-bold text-base">Not Delivered</Text>
             </TouchableOpacity>
 
-            {item.paymentMethod === 'COD' && item.paymentStatus !== 'SUCCESS' ? (
+            {(item.paymentMethod === 'COD' && item.paymentStatus !== 'SUCCESS') || ((item.codAdjustmentAmount || item.codToCollect || 0) > 0 && !item.codCollected) ? (
               <TouchableOpacity 
                 className="flex-1 bg-blue-600 py-3 rounded-lg items-center shadow-sm flex-row justify-center"
                 onPress={() => {
@@ -646,7 +648,7 @@ export default function RouteScreen() {
                 )}
               </TouchableOpacity>
 
-              {item.paymentMethod === 'COD' && item.paymentStatus !== 'SUCCESS' ? (
+              {(item.paymentMethod === 'COD' && item.paymentStatus !== 'SUCCESS') || ((item.codAdjustmentAmount || item.codToCollect || 0) > 0 && !item.codCollected) ? (
                 <TouchableOpacity 
                   className="flex-1 bg-blue-600 py-1.5 rounded items-center justify-center flex-row"
                   onPress={() => {
@@ -1055,8 +1057,13 @@ export default function RouteScreen() {
                 <View className="bg-gray-50 p-4 rounded-xl mb-4 items-center">
                   <Text className="text-gray-500 text-sm mb-1">Total Amount Due</Text>
                   <Text className="text-3xl font-black text-gray-900">₹{
-                    Math.round(Number((routeOrders.find((o: any) => o.id === selectedOrderId || o.order?.id === selectedOrderId) as any)?.amount || 
-                    (routeOrders.find((o: any) => o.id === selectedOrderId || o.order?.id === selectedOrderId) as any)?.order?.totalAmount || 0))
+                    (() => {
+                      const o = routeOrders.find((ro: any) => ro.id === selectedOrderId || ro.order?.id === selectedOrderId) as any;
+                      if (!o) return 0;
+                      const total = Number(o.amount || o.order?.totalAmount || 0);
+                      const paid = Number(o.onlinePaidAmount || 0);
+                      return Math.round(total - paid);
+                    })()
                   }</Text>
                 </View>
 

@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     const totalPaid = paymentsRes.rows.reduce((sum, p) => sum + Number(p.amount), 0);
     const outstanding = Math.max(0, totalExpected - totalPaid);
 
-    if (outstanding <= 0 || order.paymentStatus === 'SUCCESS') {
+    if (outstanding <= 0) {
       return NextResponse.json(
         { success: false, message: "Order is already fully paid" },
         { status: 400 }

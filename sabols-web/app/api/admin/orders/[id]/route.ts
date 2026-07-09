@@ -820,11 +820,18 @@ export async function PATCH(
 
       // cansInHand is already fetched above (used for availableForSwap calculation)
 
-      // Calculate deposit incrementally based on the CHANGE in net cans
-      const oldNetCans = oldItems.reduce((s, i) => s + i.quantity - (i.returnQuantity || 0), 0);
-      const newNetCans = enrichedNewItems.reduce((s, i) => s + i.quantity - (i.returnQuantity || 0), 0);
-      const netCansDiff = newNetCans - oldNetCans;
-      const depositDiffPaise = netCansDiff * (maxDepositRate * 100);
+      // Calculate deposit incrementally based on the exact depositAmount of each item
+      const oldTotalDeposit = oldItems.reduce((sum, item) => {
+        const netCans = item.quantity - (item.returnQuantity || 0);
+        return sum + (netCans * (item.depositAmount || 0));
+      }, 0);
+
+      const newTotalDeposit = enrichedNewItems.reduce((sum, item) => {
+        const netCans = item.quantity - (item.returnQuantity || 0);
+        return sum + (netCans * (item.depositAmount || 0));
+      }, 0);
+
+      const depositDiffPaise = (newTotalDeposit - oldTotalDeposit) * 100;
       
       const newDepositPaise = Math.max(0, oldDepositPaise + depositDiffPaise);
 

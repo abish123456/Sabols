@@ -282,6 +282,7 @@ export default function OrderDetailsScreen() {
           setIsPollingPayment(false);
           setShowCODModal(false);
           setCodPaymentLinkData(null);
+          fetchOrderDetails(); // Refresh data so UI updates
           setShowMarkDeliveredModal(true);
         }
       } catch (err) {
@@ -356,6 +357,7 @@ export default function OrderDetailsScreen() {
       const data = await res.json();
       if (res.ok && data.success) {
         setShowCODModal(false);
+        fetchOrderDetails(); // Refresh data so UI updates
         setShowMarkDeliveredModal(true);
       } else {
         Alert.alert("Error", data.message || "Failed to mark as paid");
@@ -387,6 +389,7 @@ export default function OrderDetailsScreen() {
   const customer = order.customer;
   const isCOD = order.paymentMethod === 'COD';
   const totalAmount = Math.round(Number(order.amount || order.order?.totalAmount || 0));
+  const amountDue = totalAmount - Math.round(Number(order.onlinePaidAmount || 0));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F9FAFB' }} edges={['top']}>
@@ -621,7 +624,7 @@ export default function OrderDetailsScreen() {
             ) : (
               <>
                 {/* Action Buttons */}
-                {isCOD && order.paymentStatus !== 'SUCCESS' ? (
+                {(isCOD && order.paymentStatus !== 'SUCCESS') || ((order.codAdjustmentAmount || order.codToCollect || 0) > 0 && !order.codCollected) ? (
               <View className="mb-8 flex-row gap-3">
                 <TouchableOpacity 
                   className="flex-1 bg-red-50 border border-red-200 py-4 rounded-xl items-center"
@@ -762,7 +765,7 @@ export default function OrderDetailsScreen() {
               <View className="space-y-4">
                 <View className="bg-gray-50 p-4 rounded-xl mb-4 items-center">
                   <Text className="text-gray-500 text-sm mb-1">Total Amount Due</Text>
-                  <Text className="text-3xl font-black text-gray-900">₹{totalAmount}</Text>
+                  <Text className="text-3xl font-black text-gray-900">₹{amountDue}</Text>
                 </View>
 
                 <TouchableOpacity 
