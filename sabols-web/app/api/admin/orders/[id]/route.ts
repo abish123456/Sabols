@@ -328,6 +328,7 @@ export async function PATCH(
       paymentMethod: string;
       amount: number;
       depositAmount: number;
+      codAdjustmentAmount: number | null;
       customerId: string;
       addressId: string;
       deliveryDate: Date;
@@ -342,7 +343,8 @@ export async function PATCH(
         o."paymentStatus",
         o."paymentMethod",
         o."amount",
-        o."depositAmount", 
+        o."depositAmount",
+        o."codAdjustmentAmount",
         o."customerId", 
         o."addressId", 
         o."deliveryDate", 
@@ -368,7 +370,7 @@ export async function PATCH(
       );
     }
 
-    const { status: currentStatus, paymentStatus, paymentMethod, amount: currentAmount, depositAmount, customerId, addressId, deliveryDate, pincode: oldPincode, routeToken, shiftStatus, customerPhone, orderNumber } = orderCheck.rows[0];
+    const { status: currentStatus, paymentStatus, paymentMethod, amount: currentAmount, depositAmount, codAdjustmentAmount: currentCodAdjustmentAmount, customerId, addressId, deliveryDate, pincode: oldPincode, routeToken, shiftStatus, customerPhone, orderNumber } = orderCheck.rows[0];
 
     if (currentStatus === 'DELIVERED' || currentStatus === 'CANCELLED') {
       return NextResponse.json(
@@ -722,26 +724,51 @@ export async function PATCH(
       const enrichedNewItems: any[] = [];
       let maxDepositRate = 0;
 
+      // ── returnQuantity calculation (matches customer app cart logic exactly) ──────
+      // The customer app (cart POST) sets:
+      //   finalReturnQuantity = Math.min(quantity, availableForSwap)
+      //   availableForSwap    = cansInHand - pendingReturned (from other active orders)
+      //
+      // We apply the same formula here so the admin edit deposit calculation is
+      // identical to what the customer would see when placing a fresh order.
+      const pendingReturnedRes = await query<{ pendingReturned: string }>(
+        `SELECT COALESCE(SUM(oi."returnQuantity"), 0)::bigint as "pendingReturned"
+         FROM "OrderItem" oi
+         JOIN "Order" o ON o."id" = oi."orderId"
+         JOIN "Product" p ON p."id" = oi."productId"
+         WHERE o."customerId" = $1
+           AND o."id" != $2
+           AND o."status" NOT IN ('DELIVERED', 'CANCELLED', 'NOT_DELIVERED')
+           AND p."depositAmount" > 0
+           AND (o."paymentMethod" = 'COD' OR o."paymentStatus" = 'SUCCESS')`,
+        [customerId, orderId]
+      );
+      const pendingReturned = parseInt(pendingReturnedRes.rows[0]?.pendingReturned || '0', 10);
+
+      // Fetch customer cansInHand now (before enrichedNewItems loop which needs it)
+      const customerInfoRes = await query<{ cansInHand: number }>(
+        `SELECT "cansInHand" FROM "Customer" WHERE "id" = $1`,
+        [customerId]
+      );
+      const cansInHand = customerInfoRes.rows[0]?.cansInHand || 0;
+      // How many cans the customer can physically hand back to the delivery person
+      const availableForSwap = Math.max(0, cansInHand - pendingReturned);
+
       for (const item of newItems) {
         const product = productMap.get(item.productId);
         if (!product) {
           return NextResponse.json({ success: false, message: `Product ${item.productId} not found` }, { status: 400 });
         }
-        
-        // Try to preserve returnQuantity ratio if possible
-        const oldItem = oldItems.find(oi => oi.productId === item.productId);
-        let retQty = 0;
-        if (oldItem && oldItem.quantity > 0) {
-           const ratio = (oldItem.returnQuantity || 0) / oldItem.quantity;
-           retQty = Math.round(item.quantity * ratio);
-        } else if (product.depositAmount > 0) {
-           // By default, assume they return what they order if no previous item
-           retQty = item.quantity;
-        }
-        
+
+        // Mirror the customer cart logic: return up to what's ordered, capped by available cans
+        const retQty = product.depositAmount > 0
+          ? Math.min(item.quantity, availableForSwap)
+          : 0;
+
         if (product.depositAmount > maxDepositRate) {
            maxDepositRate = product.depositAmount;
         }
+
 
         // Use the price from the request body (admin sets it, defaults to product price)
         const unitPrice = item.price || product.price;
@@ -763,8 +790,8 @@ export async function PATCH(
       }
 
       // Calculate required deposit dynamically using customer wallet logic
-      const customerRes = await query(`SELECT "cansInHand", "depositWalletBalance" FROM "Customer" WHERE "id" = $1`, [customerId]);
-      const customer = customerRes.rows[0] || { cansInHand: 0, depositWalletBalance: 0 };
+      const customerRes = await query<{ depositWalletBalance: number }>(`SELECT "depositWalletBalance" FROM "Customer" WHERE "id" = $1`, [customerId]);
+      const depositWalletBalance = customerRes.rows[0]?.depositWalletBalance || 0;
 
       const committedDepositRes = await query<{ committedDeposit: string }>(`
         SELECT COALESCE(SUM("depositAmount"), 0)::bigint as "committedDeposit"
@@ -791,17 +818,15 @@ export async function PATCH(
       const totalNewOrdered = enrichedNewItems.reduce((s, i) => s + i.quantity, 0);
       const totalNewReturned = enrichedNewItems.reduce((s, i) => s + (i.returnQuantity || 0), 0);
 
-      const futureCansInHand = customer.cansInHand + (committedOrdered - committedReturned) + (totalNewOrdered - totalNewReturned);
-      const requiredDepositBalance = Math.max(0, futureCansInHand * maxDepositRate);
+      // cansInHand is already fetched above (used for availableForSwap calculation)
 
-      // If the order was already paid, its deposit is ALREADY in the customer's depositWalletBalance.
-      // We must temporarily remove it to calculate the true 'base' wallet balance before this order.
-      const baseWalletBalance = paymentStatus === 'SUCCESS' 
-        ? Math.max(0, (customer.depositWalletBalance || 0) - (oldDepositPaise / 100))
-        : (customer.depositWalletBalance || 0);
-
-      const depositToPay = Math.max(0, requiredDepositBalance - baseWalletBalance - committedDeposit);
-      const newDepositPaise = Math.round(depositToPay * 100);
+      // Calculate deposit incrementally based on the CHANGE in net cans
+      const oldNetCans = oldItems.reduce((s, i) => s + i.quantity - (i.returnQuantity || 0), 0);
+      const newNetCans = enrichedNewItems.reduce((s, i) => s + i.quantity - (i.returnQuantity || 0), 0);
+      const netCansDiff = newNetCans - oldNetCans;
+      const depositDiffPaise = netCansDiff * (maxDepositRate * 100);
+      
+      const newDepositPaise = Math.max(0, oldDepositPaise + depositDiffPaise);
 
       const newTotalPaise = newProductAmountPaise + newDepositPaise;
       const amountDiff = newTotalPaise - oldTotalPaise; // positive = increase, negative = reduction
@@ -837,55 +862,76 @@ export async function PATCH(
           [newTotalPaise, newDepositPaise, newTotalQty, orderId]
         );
 
-        // 4. Handle product amount reduction → Order Wallet
-        if (productAmountDiff < 0 && paymentStatus === 'SUCCESS') {
-          orderWalletCredit = Math.abs(productAmountDiff);
-          const creditRupees = orderWalletCredit / 100;
-          await client.query(
-            `UPDATE "Customer" SET "orderWalletBalance" = "orderWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
-            [creditRupees, customerId]
-          );
-          await client.query(
-            `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
-             VALUES ($1, $2, $3, 'CREDIT', 'ORDER', 'ORDER_EDIT', $4, $5, NOW())`,
-            [crypto.randomUUID(), customerId, creditRupees, orderId,
-             `Order Wallet credit: order items edited — reduced by ₹${creditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
-          );
-        }
+        // 4. Handle amount changes (reduction or increase)
+        // We look at the TOTAL amountDiff (product + deposit).
+        const existingCodAdjPaise = Math.round((currentCodAdjustmentAmount || 0));
 
-        // 5. Handle deposit reduction → Deposit Wallet
-        if (depositDiff < 0 && paymentStatus === 'SUCCESS') {
-          depositWalletCredit = Math.abs(depositDiff); // This is the refund amount
-          const depositCreditRupees = depositWalletCredit / 100;
-          
-          // Since they no longer need this deposit, we REDUCE the deposit wallet balance
-          await client.query(
-            `UPDATE "Customer" SET "depositWalletBalance" = "depositWalletBalance" - $1, "updatedAt" = NOW() WHERE "id" = $2`,
-            [depositCreditRupees, customerId]
-          );
-          await client.query(
-            `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
-             VALUES ($1, $2, $3, 'DEBIT', 'DEPOSIT', 'ORDER_EDIT', $4, $5, NOW())`,
-            [crypto.randomUUID(), customerId, depositCreditRupees, orderId,
-             `Deposit Wallet adjustment: deposit reduced by ₹${depositCreditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
-          );
-          
-          // And we REFUND this amount to their Order Wallet so they can spend it
-          await client.query(
-            `UPDATE "Customer" SET "orderWalletBalance" = "orderWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
-            [depositCreditRupees, customerId]
-          );
-          await client.query(
-            `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
-             VALUES ($1, $2, $3, 'CREDIT', 'ORDER', 'ORDER_EDIT', $4, $5, NOW())`,
-            [crypto.randomUUID(), customerId, depositCreditRupees, orderId,
-             `Order Wallet credit: deposit refund of ₹${depositCreditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
-          );
-        }
+        if (amountDiff < 0) {
+          // Total order amount decreased.
+          const reductionPaise = Math.abs(amountDiff);
 
-        // 6. Handle product amount increase → extra COD to collect
-        if (productAmountDiff > 0) {
-          codAmountAdded = productAmountDiff;
+          // First absorb from COD adjustment (since it was never paid online)
+          const codAbsorbed = Math.min(reductionPaise, existingCodAdjPaise);
+          const newCodAdj = existingCodAdjPaise - codAbsorbed;
+
+          // Remainder is a true reduction from the online-paid portion
+          const onlinePaidReduction = reductionPaise - codAbsorbed;
+
+          await client.query(
+            `UPDATE "Order" SET "codAdjustmentAmount" = $1, "updatedAt" = NOW() WHERE "id" = $2`,
+            [newCodAdj, orderId]
+          );
+
+          if (onlinePaidReduction > 0 && paymentStatus === 'SUCCESS') {
+            // Split the refund between Deposit Wallet and Order Wallet
+            const actualDepositRefundPaise = Math.min(onlinePaidReduction, Math.abs(Math.min(0, depositDiff)));
+            const actualProductRefundPaise = onlinePaidReduction - actualDepositRefundPaise;
+
+            // Handle Deposit Refund
+            if (actualDepositRefundPaise > 0) {
+              const depositCreditRupees = actualDepositRefundPaise / 100;
+              // Reduce deposit wallet balance (since they no longer hold this deposit)
+              await client.query(
+                `UPDATE "Customer" SET "depositWalletBalance" = "depositWalletBalance" - $1, "updatedAt" = NOW() WHERE "id" = $2`,
+                [depositCreditRupees, customerId]
+              );
+              await client.query(
+                `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+                 VALUES ($1, $2, $3, 'DEBIT', 'DEPOSIT', 'ORDER_EDIT', $4, $5, NOW())`,
+                [crypto.randomUUID(), customerId, depositCreditRupees, orderId,
+                 `Deposit Wallet adjustment: deposit reduced by ₹${depositCreditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
+              );
+              // Refund the money to their Order Wallet so they can spend it
+              await client.query(
+                `UPDATE "Customer" SET "orderWalletBalance" = "orderWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
+                [depositCreditRupees, customerId]
+              );
+              await client.query(
+                `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+                 VALUES ($1, $2, $3, 'CREDIT', 'ORDER', 'ORDER_EDIT', $4, $5, NOW())`,
+                [crypto.randomUUID(), customerId, depositCreditRupees, orderId,
+                 `Order Wallet credit: deposit refund of ₹${depositCreditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
+              );
+            }
+
+            // Handle Product Refund
+            if (actualProductRefundPaise > 0) {
+              const creditRupees = actualProductRefundPaise / 100;
+              await client.query(
+                `UPDATE "Customer" SET "orderWalletBalance" = "orderWalletBalance" + $1, "updatedAt" = NOW() WHERE "id" = $2`,
+                [creditRupees, customerId]
+              );
+              await client.query(
+                `INSERT INTO "WalletTransaction" ("id", "customerId", "amount", "type", "walletType", "referenceType", "referenceId", "description", "createdAt")
+                 VALUES ($1, $2, $3, 'CREDIT', 'ORDER', 'ORDER_EDIT', $4, $5, NOW())`,
+                [crypto.randomUUID(), customerId, creditRupees, orderId,
+                 `Order Wallet credit: order items edited — reduced by ₹${creditRupees.toFixed(2)} (Order #${(orderNumber || orderId.slice(-8)).toUpperCase()})`]
+              );
+            }
+          }
+        } else if (amountDiff > 0) {
+          // Total order amount increased. Add to COD obligation.
+          codAmountAdded = amountDiff;
           await client.query(
             `UPDATE "Order" SET "codAdjustmentAmount" = COALESCE("codAdjustmentAmount", 0) + $1, "updatedAt" = NOW() WHERE "id" = $2`,
             [codAmountAdded, orderId]
